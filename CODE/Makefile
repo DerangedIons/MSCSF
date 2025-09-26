@@ -1,7 +1,7 @@
 # Compiler and flags
 CC = clang++#g++
 CFLAGS = -O3 -w #-std=c++11
-CFLAGS2 = -Xpreprocessor -fopenmp -lomp -L/opt/homebrew/Cellar/libomp/16.0.6/lib -I/opt/homebrew/Cellar/libomp/16.0.6/include
+CFLAGS2 = -Xpreprocessor -fopenmp -lomp -L/opt/homebrew/Cellar/libomp/21.1.2/lib -I/opt/homebrew/Cellar/libomp/21.1.2/include
 
 # build options
 all: single_native tissue_native single_3D single_0D tissue_0D Ca_clamp_0D Ca_clamp_3D bin_to_vtk_dat_tissue bin_to_vtk_dat_3Dcell tissue_network tissue_0D_network create_connection_map
@@ -16,7 +16,7 @@ dyad = lib/Single_dyad.cpp
 
 # Compile
 single_native: $(common) Single_cell_native_main.cc
-	$(CC) $(CFLAGS) -o model_single_native $(common) Single_cell_native_main.cc
+	$(CC) $(CFLAGS) $(CFLAGS2) -o model_single_native $(common) Single_cell_native_main.cc
 
 tissue_native: $(common) $(SC) $(tissue) Tissue_native_main.cc
 	$(CC) $(CFLAGS) $(CFLAGS2) -o model_tissue_native $(common) $(SC) $(tissue) Tissue_native_main.cc
