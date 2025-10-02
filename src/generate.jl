@@ -70,7 +70,7 @@ low = (
         Beats = 1,
         Sim_cell_size = "full",
         Read_state = "On",
-        total_time = 1100
+        total_time = 1000
     )
 )
 
@@ -105,7 +105,7 @@ high = (
         Beats = 1,
         Sim_cell_size = "full",
         Read_state = "On",
-        total_time = 1100
+        total_time = 1000
     )
 )
 
