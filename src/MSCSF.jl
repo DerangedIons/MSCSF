@@ -1,20 +1,27 @@
 module MSCSF
 
-using CSV, DataFrames
+using CSV, DataFrames, Distributions, Statistics, StatsPlots
 
 dir::String = ""
 
 function __init__()
     global dir = mkpath(abspath(joinpath(@__DIR__, "..", "data")))
+end
 
-    # copy binaries to data/
-    for file in readdir(joinpath(@__DIR__, "..", "CODE"); join=true)
-        startswith(basename(file), "model_") && cp(file, joinpath(dir, basename(file)); force=true)
+output_dir(ref = "SR") = joinpath(dir, "Outputs_3Dcell_$ref")
+
+#-----------------------------------------------------------------------------# sr_df
+# Step 4: Get all runs into single DataFrame
+function get_df(ref = "SR")
+    out = output_dir(ref)
+    dirs = filter(readdir(out, join=true)) do path
+        startswith(basename(path), "Results_run_")
     end
-
-    # Create PATH.txt and the state_and_geometry_files directory
-    write(joinpath(dir, "PATH.txt"), mkpath(joinpath(dir, "state_and_geometry_files")))
-    mkpath(joinpath(dir, "state_and_geometry_files", "State_files", "Single_cell"))
+    files = joinpath.(dirs, Ref("CRU.txt"))
+    dfs = [CSV.read(file, DataFrame, header=false) for file in files]
+    rename!.(dfs, Ref(cru_cols))
+    df = vcat(dfs...; cols=:union, source="run")
+    select!(df, "run", All())
 end
 
 # Field names for CRU.txt output files
@@ -46,103 +53,28 @@ cru_cols = [
     "JCab_ss"          # background Ca²⁺ current, subspace
 ]
 
-function _cmd(kw)
-    out = [joinpath(dir, "model_single_3D")]
-    for (k, v) in kw
-        push!(out, string(k), string(v))
-    end
-    return Cmd(out)
-end
+#-----------------------------------------------------------------------------# stats
+function stats(df, col = "Ca_cyto")
+    # Determine SR threshold
+    x = df[!, col]
+    cutoff = 0.1 * (maximum(x) - minimum(x)) + minimum(x)
 
-# Run model and return kw arguments
-_run(; kw...) = cd(dir) do
-    @time run(_cmd(kw))
-    NamedTuple(kw)
-end
+    @info "Getting stats for $col with cutoff $cutoff."
+    inits = combine(groupby(df, "run"), first)
 
-#-----------------------------------------------------------------------------# sr_prepace
-# Step 1 (~2.5 minutes for 50 beats at 250ms BCL)
-function sr_prepace(; Beats=50, BCL=350, kw...)
-    kw = _run(;
-        Model = "minimal",
-        Beats = Beats,
-        BCL = BCL,
-        ISO = 1,
-        Jup_scale = 2,
-        tau_ss_type = "medium_fast",
-        Sim_cell_size = "testing",
-        Total_time = Beats * BCL,
-        Write_state = "ave",
-        Reference = "SR",
-        Results_Reference = "prepace",
-        Spatial_output_interval_data = 0,
-        Spatial_output_interval_vtk = 0,
-        kw...
+    # Drop the initial 300ms
+    df = filter(row -> row.t > 300, df)
+
+    # Get stats
+    g = groupby(df, "run")
+    out = combine(g,
+        col => (x -> findfirst(>(cutoff), x)) => :i,  # Start time of SR
+        col => (x -> findlast(>(cutoff), x)) => :j,  # End time of SR
+        col => findmax => :max,  # (max value, index)
     )
-    joinpath(dir, "Outputs_3Dcell_$(kw.Reference)", "Results_$(kw.Results_Reference)")
+    out[!, :init] = inits[!, col]
+    out[!, :duration] = out.j .- out.i
+    out
 end
-
-
-#-----------------------------------------------------------------------------# sr_prepace_full
-# Step 2 (~8 minutes for 4 beats at 350ms BCL)
-function sr_prepace_full(; Beats=4, BCL=350, kw...)
-    kw = _run(;
-        Model = "minimal",
-        Beats = Beats,
-        BCL = BCL,
-        ISO = 1,
-        Jup_scale = 2,
-        tau_ss_type = "medium_fast",
-        Sim_cell_size = "full",
-        Total_time = Beats * BCL,
-        Read_state = "ave",
-        Write_state = "On",
-        Reference = "SR",
-        Results_Reference = "prepace_full",
-        Spatial_output_interval_data = 0,
-        Spatial_output_interval_vtk = 0,
-        kw...
-    )
-    joinpath(dir, "Outputs_3Dcell_$(kw.Reference)", "Results_$(kw.Results_Reference)")
-end
-
-
-#-----------------------------------------------------------------------------# sr_run
-# Step 3 (~5 minutes/per 1000ms)
-function sr_run(i::Integer; Beats=1, BCL=350, kw...)
-    kw = _run(;
-        Model = "minimal",
-        Beats = Beats,
-        BCL = BCL,
-        ISO = 1,
-        Jup_scale = 2,
-        tau_ss_type = "medium_fast",
-        Sim_cell_size = "full",
-        Read_state = "On",
-        Write_state = "On",
-        Total_time = 1000,
-        Reference = "SR",
-        Results_Reference = "Run_$i",
-        Spatial_output_interval_data = 0,
-        Spatial_output_interval_vtk = 0,
-        kw...
-    )
-    joinpath(dir, "Outputs_3Dcell_$(kw.Reference)", "Results_$(kw.Results_Reference)")
-end
-
-
-#-----------------------------------------------------------------------------# sr_df
-# Step 4: Get all runs into single DataFrame
-function sr_df(Reference = "SR")
-    dirs = filter(readdir(joinpath(dir, "Outputs_3Dcell_$Reference"), join=true)) do path
-        startswith(basename(path), "Results_Run_")
-    end
-    files = joinpath.(dirs, Ref("CRU.txt"))
-    dfs = [CSV.read(file, DataFrame, header=false) for file in files]
-    rename!.(dfs, Ref(cru_cols))
-    df = vcat(dfs...; cols=:union, source="run")
-    select!(df, "run", All())
-end
-
 
 end
