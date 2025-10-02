@@ -17,7 +17,7 @@ N = length(ARGS) == 1 ? parse(Int, ARGS[1]) : 10
 #-----------------------------------------------------------------------------# functions
 function make_cmd(args)
     out = ["./model_single_3D"]
-    for (k, v) in pairs(merge(common_args, args))
+    for (k, v) in pairs(args)
         push!(out, string(k), string(v))
     end
     return Cmd(out)
@@ -45,7 +45,7 @@ low = (
         Model = "minimal",
         ISO = 0,
         Jup_scale = 1,
-        tau_ss_type = "medium_low",
+        tau_ss_type = "medium_slow",
         BCL = 1000,
         Reference = "sr_low",
         Spatial_output_interval_data = 0,
