@@ -14,6 +14,26 @@ cp(joinpath(@__DIR__, "..", "CODE", "model_single_3D"), joinpath(DIR, "model_sin
 # Number of runs to perform; default is 10 if not provided as command line argument
 N = length(ARGS) == 1 ? parse(Int, ARGS[1]) : 10
 
+#-----------------------------------------------------------------------------# functions
+function make_cmd(args)
+    out = ["./model_single_3D"]
+    for (k, v) in pairs(merge(common_args, args))
+        push!(out, string(k), string(v))
+    end
+    return Cmd(out)
+end
+
+function run_model(args)
+    results_dir = joinpath(DIR, "Outputs_3Dcell_$(args.Reference)")
+    if isdir(results_dir)
+        @info "`$(args.Reference)` results directory already exists, skipping..."
+    else
+        cd(joinpath(@__DIR__, "..", "data")) do
+            @time run(make_cmd(args))
+        end
+    end
+end
+
 #-----------------------------------------------------------------------------# notes
 # Low adrenergic / Low SR: ISO 0, BCL 1000, Jup_scale 1.0, tau_ss_type medium_low
 # High adrenergic / High SR: ISO 1, BCL 350, Jup_scale 2.0, tau_ss_type medium_fast,
@@ -109,25 +129,4 @@ for _ in 1:N
     args = merge(high.common_args, high.run_args, (; Results_Reference = "run_$(lpad(n, 3, '0'))"))
     @info "Running high SR Run $n" args
     run_model(args)
-end
-
-
-#-----------------------------------------------------------------------------# functions
-function make_cmd(args)
-    out = ["./model_single_3D"]
-    for (k, v) in pairs(merge(common_args, args))
-        push!(out, string(k), string(v))
-    end
-    return Cmd(out)
-end
-
-function run_model(args)
-    results_dir = joinpath(DIR, "Outputs_3Dcell_$(args.Reference)")
-    if isdir(results_dir)
-        @info "`$(args.Reference)` results directory already exists, skipping..."
-    else
-        cd(joinpath(@__DIR__, "..", "data")) do
-            @time run(make_cmd(args))
-        end
-    end
 end
