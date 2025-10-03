@@ -25,8 +25,8 @@ end
 
 function run_model(args)
     results_dir = joinpath(DIR, "Outputs_3Dcell_$(args.Reference)")
-    if isdir(results_dir)
-        @info "`$(args.Reference)` results directory already exists, skipping..."
+    if isdir(results_dir) && isdir(joinpath(results_dir, "Results_$(args.Results_Reference)"))
+        @info "`Outputs_3DCell_$(args.Reference)/Results_$(args.Results_Reference)` results directory already exists, skipping..."
     else
         cd(joinpath(@__DIR__, "..", "data")) do
             @time run(make_cmd(args))
@@ -45,7 +45,7 @@ low = (
         Model = "minimal",
         ISO = 0,
         Jup_scale = 1,
-        tau_ss_type = "medium_slow",
+        tau_ss_type = "medium_high",
         BCL = 1000,
         Reference = "sr_low",
         Spatial_output_interval_data = 0,
