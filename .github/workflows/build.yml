@@ -1,0 +1,120 @@
+name: Build Models
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            makefile: Makefile_linux
+            artifact_suffix: linux
+          - os: macos-latest
+            makefile: Makefile
+            artifact_suffix: macos
+          - os: windows-latest
+            makefile: none
+            artifact_suffix: windows
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Linux dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y g++ make
+
+    - name: Setup macOS dependencies
+      if: runner.os == 'macOS'
+      run: |
+        brew install libomp
+        # Get the actual libomp version installed
+        LIBOMP_VERSION=$(brew list --versions libomp | awk '{print $2}')
+        echo "LIBOMP_VERSION=$LIBOMP_VERSION" >> $GITHUB_ENV
+
+    - name: Update macOS Makefile with correct libomp path
+      if: runner.os == 'macOS'
+      run: |
+        cd CODE
+        sed -i '' "s|/opt/homebrew/Cellar/libomp/[0-9.]*|/opt/homebrew/Cellar/libomp/${{ env.LIBOMP_VERSION }}|g" Makefile
+
+    - name: Setup Windows dependencies
+      if: runner.os == 'Windows'
+      run: |
+        choco install mingw -y
+        echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" >> $env:GITHUB_PATH
+
+    - name: Build on Linux
+      if: runner.os == 'Linux'
+      run: |
+        cd CODE
+        make -f Makefile_linux all
+
+    - name: Build on macOS
+      if: runner.os == 'macOS'
+      run: |
+        cd CODE
+        make -f Makefile all
+
+    - name: Build on Windows
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        cd CODE
+        # Compile all models
+        g++ -O2 -w -fopenmp -o model_single_native.exe Single_cell_native_main.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp
+        g++ -O2 -w -fopenmp -o model_tissue_native.exe Tissue_native_main.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/Tissue.cpp
+        g++ -O2 -w -fopenmp -o model_tissue_network.exe Tissue_native_network_main.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/Tissue.cpp
+        g++ -O2 -w -fopenmp -o model_single_3D.exe Single_cell_3D_main.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/CRU.cpp lib/myofilament.cpp
+        g++ -O2 -w -fopenmp -o model_single_0D.exe Single_cell_0D_main.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/CRU.cpp lib/myofilament.cpp lib/Spontaneous_release_functions.cpp
+        g++ -O2 -w -fopenmp -o model_Ca_clamp_3D.exe Single_cell_Ca_clamp_3D.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/CRU.cpp lib/myofilament.cpp
+        g++ -O2 -w -fopenmp -o model_Ca_clamp_0D.exe Single_cell_Ca_clamp_0D.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/CRU.cpp lib/myofilament.cpp lib/Spontaneous_release_functions.cpp
+        g++ -O2 -w -fopenmp -o model_tissue_0D.exe Tissue_integrated_main.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/Tissue.cpp lib/CRU.cpp lib/myofilament.cpp lib/Spontaneous_release_functions.cpp
+        g++ -O2 -w -fopenmp -o model_tissue_0D_network.exe Tissue_integrated_network.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/Tissue.cpp lib/CRU.cpp lib/myofilament.cpp lib/Spontaneous_release_functions.cpp
+        g++ -O2 -w -fopenmp -o bin_to_vtk_tissue.exe Data_convert_binary_to_vtk_text_tissue.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/Tissue.cpp
+        g++ -O2 -w -fopenmp -o bin_to_vtk_3Dcell.exe Data_convert_binary_to_vtk_text_3Dcell.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/CRU.cpp lib/myofilament.cpp
+        g++ -O2 -w -fopenmp -o create_connection_map.exe Create_heterogeneous_network_connection_map.cc lib/Arguments.c lib/Initialisation.c lib/Model.c lib/Model*.cpp lib/Read_write_state.c lib/Outputs.cpp lib/Spatial_coupling.cpp lib/Tissue.cpp
+
+    - name: List compiled binaries (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cd CODE
+        ls -lh model_* bin_to_vtk_* create_connection_map 2>/dev/null || true
+
+    - name: List compiled binaries (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        cd CODE
+        ls -lh *.exe 2>/dev/null || true
+
+    - name: Upload artifacts (Unix)
+      if: runner.os != 'Windows'
+      uses: actions/upload-artifact@v4
+      with:
+        name: models-${{ matrix.artifact_suffix }}
+        path: |
+          CODE/model_*
+          CODE/bin_to_vtk_*
+          CODE/create_connection_map
+        retention-days: 30
+
+    - name: Upload artifacts (Windows)
+      if: runner.os == 'Windows'
+      uses: actions/upload-artifact@v4
+      with:
+        name: models-${{ matrix.artifact_suffix }}
+        path: CODE/*.exe
+        retention-days: 30
