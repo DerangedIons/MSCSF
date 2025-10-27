@@ -25,8 +25,8 @@ end
 
 function run_model(args)
     results_dir = joinpath(DIR, "Outputs_3Dcell_$(args.Reference)")
-    if isdir(results_dir)
-        @info "`$(args.Reference)` results directory already exists, skipping..."
+    if isdir(results_dir) && isdir(joinpath(results_dir, "Results_$(args.Results_Reference)"))
+        @info "`Outputs_3DCell_$(args.Reference)/Results_$(args.Results_Reference)` results directory already exists, skipping..."
     else
         cd(joinpath(@__DIR__, "..", "data")) do
             @time run(make_cmd(args))
@@ -45,7 +45,7 @@ low = (
         Model = "minimal",
         ISO = 0,
         Jup_scale = 1,
-        tau_ss_type = "medium_slow",
+        tau_ss_type = "medium_fast",
         BCL = 1000,
         Reference = "sr_low",
         Spatial_output_interval_data = 0,
@@ -119,14 +119,14 @@ run_model(merge(high.common_args, high.prepace_full_args))
 
 #-----------------------------------------------------------------------------# runs
 for _ in 1:N
-    # Make sure we don't overwrite existing runs
-    n = length(filter(x -> startswith(x, r"Results_run"), readdir(joinpath(@__DIR__, "..", "data", "Outputs_3Dcell_sr_low")))) + 1
+    # Make sure we don't overwrite previous runs
+    low_dir = joinpath(DIR, "Outputs_3Dcell_$(low.common_args.Reference)")
+    n = length(filter(x -> startswith(x, r"Results_run"), readdir(low_dir))) + 1
     args = merge(low.common_args, low.run_args, (; Results_Reference = "run_$(lpad(n, 3, '0'))"))
-    @info "Running low SR Run $n" args
     run_model(args)
 
-    n = length(filter(x -> startswith(x, r"Results_run"), readdir(joinpath(@__DIR__, "..", "data", "Outputs_3Dcell_sr_high")))) + 1
-    args = merge(high.common_args, high.run_args, (; Results_Reference = "run_$(lpad(n, 3, '0'))"))
-    @info "Running high SR Run $n" args
-    run_model(args)
+    high_dir = joinpath(DIR, "Outputs_3Dcell_$(high.common_args.Reference)")
+    n2 = length(filter(x -> startswith(x, r"Results_run"), readdir(high_dir))) + 1
+    args2 = merge(high.common_args, high.run_args, (; Results_Reference = "run_$(lpad(n2, 3, '0'))"))
+    run_model(args2)
 end
