@@ -1,28 +1,144 @@
 module MSCSF
 
-using CSV, DataFrames, Distributions, Statistics, StatsPlots
+using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultApplication
 
-dir::String = ""
+export Model3D, Model3DSimulations, sims_low, sims_high, get_df,
+    reference, results, open_reference, open_results
+
+#-----------------------------------------------------------------------------# init
+DIR::String = ""  # where data goes, e.g. $DIR/$Reference/$Results_Reference/
+STATE_AND_GEOMETRY_FILES = ""  # Where things get saved to/read from when using `Read_state` and `Write_state`
 
 function __init__()
-    global dir = mkpath(abspath(joinpath(@__DIR__, "..", "data")))
+    global DIR = @get_scratch!("data")
+    global STATE_AND_GEOMETRY_FILES = joinpath(DIR, "state_and_geometry_files")
+
+    # Directory needs to exist or model_single_3D code crashes
+    write(joinpath(DIR, "PATH.txt"), STATE_AND_GEOMETRY_FILES)
+    mkpath(joinpath(STATE_AND_GEOMETRY_FILES, "State_files", "Single_cell"))
 end
 
-output_dir(ref = "SR") = joinpath(dir, "Outputs_3Dcell_$ref")
+#-----------------------------------------------------------------------------# Model3D
+@kwdef mutable struct Model3D
+    bin::String = joinpath(@__DIR__, "..", "CODE", "model_single_3D")
+    Model::String = "minimal"
+    ISO::Int = 0
+    Jup_scale::Float64 = 1.0
+    BCL::Int = 1000
+    tau_ss_type::String = "medium_fast"
+    Spatial_output_interval_data::Int = 0
+    Spatial_output_interval_vtk::Int = 0
+    Reference::String = "temp"
+    Results_Reference::String = "temp"
+    Beats::Int = 1
+    Read_state::String = "Off"
+    Write_state::String = "Off"
+    Total_time::Int = Beats * BCL
+    Sim_cell_size::String = "full"
+end
 
-#-----------------------------------------------------------------------------# sr_df
-# Step 4: Get all runs into single DataFrame
-function get_df(ref = "SR")
-    out = output_dir(ref)
-    dirs = filter(readdir(out, join=true)) do path
-        startswith(basename(path), "Results_run_")
+function Base.Cmd(o::Model3D)
+    out = [o.bin]
+    ref_dir = joinpath(DIR, "Outputs_3Dcell_$(o.Reference)")
+    res_dir = joinpath(ref_dir, "Results_$(o.Results_Reference)")
+    mkpath(res_dir)
+
+    for name in setdiff(fieldnames(Model3D), (:bin,))
+        value = getfield(o, name)
+        push!(out, string(name), string(value))
     end
-    files = joinpath.(dirs, Ref("CRU.txt"))
-    dfs = [CSV.read(file, DataFrame, header=false) for file in files]
-    rename!.(dfs, Ref(cru_cols))
+    Cmd(out)
+end
+
+Base.run(o::Model3D) = cd(() -> run(Cmd(o)), DIR)
+
+reference(o::Model3D) = mkpath(joinpath(DIR, "Outputs_3Dcell_$(o.Reference)"))
+results(o::Model3D) = mkpath(joinpath(DIR, "Outputs_3Dcell_$(o.Reference)", "Results_$(o.Results_Reference)"))
+
+open_reference(o) = DefaultApplication.open(reference(o))
+open_results(o) = DefaultApplication.open(results(o))
+
+#-----------------------------------------------------------------------------# Model3DSimulations
+struct Model3DSimulations
+    Reference::String
+    prepace::Model3D
+    prepace_full::Model3D
+    runner::Model3D
+
+    function Model3DSimulations(Reference::String, prepace, prepace_full, runner)
+        prepace.Reference = Reference
+        prepace.Results_Reference = "prepace"
+        prepace.Write_state = "ave"
+
+        prepace_full.Reference = Reference
+        prepace_full.Results_Reference = "prepace_full"
+        prepace_full.Read_state = "ave"
+        prepace_full.Write_state = "On"
+
+        runner.Reference = Reference
+        runner.Results_Reference = "run_" * lpad(1, 4, '0')
+        runner.Read_state = "On"
+        new(Reference, prepace, prepace_full, runner)
+    end
+end
+
+
+reference(o::Model3DSimulations) = reference(o.runner)
+function results(o::Model3DSimulations)
+    filter(readdir(reference(o))) do dir
+        startswith(dir, "Results_run_")
+    end
+end
+
+Base.length(o::Model3DSimulations) = length(results(o))
+
+function Base.run(o::Model3DSimulations)
+    n = length(o) + 1
+    o.runner.Results_Reference = "run_" * lpad(n, 4, '0')
+    if !isfile(joinpath(reference(o), "Results_prepace", "CRU.txt"))
+        @info "Running prepace for $(o.Reference)..."
+        run(o.prepace)
+    end
+    if !isfile(joinpath(reference(o), "Results_prepace_full", "CRU.txt"))
+        @info "Running full prepace for $(o.Reference)..."
+        run(o.prepace_full)
+    end
+    @info "Running simulation run $n for $(o.Reference)..."
+    run(o.runner)
+end
+
+function sims_low()
+    common = (ISO = 0, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 1000)
+    prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
+    prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
+    runner = Model3D(; Beats=1, Sim_cell_size="full", common...)
+    Model3DSimulations("sr_low", prepace, prepace_full, runner)
+end
+
+# Integrated_model_spatial_minimal_BCL_1000_region_EPI_ISO_0.00_ACh_0.00_remodelling_none_drug_none_mut_none_env_intact_dimen_15_20_65_ref_none_state.dat
+
+function sims_high()
+    common = (ISO = 1, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 350)
+    prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
+    prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
+    runner = Model3D(; Beats=1, Sim_cell_size="full", common...)
+    Model3DSimulations("sr_high", prepace, prepace_full, runner)
+end
+
+#-----------------------------------------------------------------------------# get_df
+function get_df(Reference::String, select=1:10)
+    result_dirs = filter(readdir(joinpath(DIR, "Outputs_3Dcell_$Reference"))) do dir
+        startswith(dir, "Results_run_")
+    end
+    files = joinpath.(DIR, "Outputs_3Dcell_$Reference", result_dirs, Ref("CRU.txt"))
+    dfs = [CSV.read(file, DataFrame; select, header=false) for file in files]
+    rename!.(dfs, Ref(cru_cols[select]))
     df = vcat(dfs...; cols=:union, source="run")
     select!(df, "run", All())
 end
+
+get_df(o::Model3D) = get_df(o.Reference)
+get_df(o::Model3DSimulations) = get_df(o.Reference)
 
 # Field names for CRU.txt output files
 cru_cols = [
@@ -53,28 +169,6 @@ cru_cols = [
     "JCab_ss"          # background Ca²⁺ current, subspace
 ]
 
-#-----------------------------------------------------------------------------# stats
-function stats(df, col = "Ca_cyto")
-    # Determine SR threshold
-    x = df[!, col]
-    cutoff = 0.1 * (maximum(x) - minimum(x)) + minimum(x)
-
-    @info "Getting stats for $col with cutoff $cutoff."
-    inits = combine(groupby(df, "run"), first)
-
-    # Drop the initial 300ms
-    df = filter(row -> row.t > 300, df)
-
-    # Get stats
-    g = groupby(df, "run")
-    out = combine(g,
-        col => (x -> findfirst(>(cutoff), x)) => :i,  # Start time of SR
-        col => (x -> findlast(>(cutoff), x)) => :j,  # End time of SR
-        col => findmax => :max,  # (max value, index)
-    )
-    out[!, :init] = inits[!, col]
-    out[!, :duration] = out.j .- out.i
-    out
-end
+# TODO: fit distribution to DataFrame column(s) RyR_OA/RyR_OI
 
 end

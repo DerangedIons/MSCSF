@@ -1,6 +1,32 @@
+# README for Julia code:
+
+## Usage
+
+- REQUIREMENT: You've run `CODE/Makefile` to generate the `CODE/model_single_3D` executable.
+- Change directory to root of repo, then:
+
+```julia
+# Installation
+using Pkg
+Pkg.activate(".")
+Pkg.instantiate()
+
+# Running 10 simulations of "low" level
+using MSCSF, ProgressMeter
+
+l = sims_low()  # See also: sims_high()
+
+@showprogress for i in 1:10
+    run(l)
+end
+```
+
+
+# Original README:
+
 ____________________________________________________________________
 Source code for the "Multi-scale cardiac simulation framework", including multiple models and associated with multiple publications.
-    
+
     Please cite using the Zenodo resource: 10.5281/zenodo.10204624 (all versions doi)
 
 This version is released with the publications:
@@ -54,7 +80,7 @@ ________________________________________________________________________________
 
 ____________________________________________________________________
 1) Compile the code (mac and Linux)
-    
+
     Navigate to "CODE"
     Copy the Makefile_linux or Makefile_mac to a file called "Makefile"
     Type "make"
@@ -86,14 +112,14 @@ ____________________________________________________________________
 
 ____________________________________________________________________
 2) Set your path - this is the location your tissue geometry and all state files will be stored/read/written
-    
+
     Move the folder "MSCSF_state_and_geometry_files" to a sensible location
     Add the full path to PATH.txt e.g. "/Users/username/MSCSF_state_and_geometry_files"
 ____________________________________________________________________
 
 ____________________________________________________________________
 3) Run code
-    
+
     Can run within the CODE folder, but it is suggested to run elsewhere (e.g. simulations folder).
     Copy the executable desired and PATH.txt to your simulations folder
     Execute with default setup: ./model_X
@@ -104,11 +130,11 @@ ____________________________________________________________________
 
     Multiple example scripts have been provided in Example_scripts, to demonstrate full functionality.
     Use the below instructions and the exmaples as a guide to perform any simulation you like.
-    
+
     Executable can be run with any number of options for settings, passed as command line arguments:
 
     • "./model_X ARG1 VALUE ARG2 VALUE ..."
-    
+
     Any number of arguments  may be passed and in any order - as long as the value follows the associated argument
     run "./model_X Display_args" to print to screen all argument options for that implementation
     Full options and description is in the documentation; below (point 7) are given just the basics.
@@ -117,7 +143,7 @@ ____________________________________________________________________
 
 ____________________________________________________________________
 5) Main outputs (full list in documentation):
-    
+
     The simulations will produce multiple outputs.
     • In the parent directory, "Log.dat" contains a log of all simulations performed, the time set, and settings
     • In the parent directory will be created an "Outputs_X" directory where X is determined by 1) executable run and 2) any reference passed in.
@@ -130,10 +156,10 @@ ____________________________________________________________________
             • Properties.dat            - measured properties (dvdt, APD, CaT_min/max etc) for the final two beats of a simulation
             • Vm_linescan_x.dat         - Idealised tissue models only; contains rows of voltage for an x-linescan, one row per ms
             • CRU.dat                   - 3Dcell/integrated models only; detailed time courses of calcium concentration and calcium handling dynamics
-            • Ca_linescan_{x/y/z}.dat"  - 3Dcell models only; linescans crossing through the centre of the cell in x, y and z 
+            • Ca_linescan_{x/y/z}.dat"  - 3Dcell models only; linescans crossing through the centre of the cell in x, y and z
             • Note:                     - For tissue models, data for three different cells within the tissue will be written, with "_cell_{1-3}.dat"
                                           appended to the filenames for Currents, Properties and CRU.
-    
+
         • "Outputs_X/Results_Y/Settings.dat" - text file - record of all of the settings for the most recent simulation X+Y; equivilent to screen outputs
         • "Outputs_X/Properties_log.dat"     - text file - contains a single line entry of final measured properties for every simulation within Outputs_X - appended.
 
@@ -145,31 +171,31 @@ ____________________________________________________________________
             • Voltage clamp files (if Vclamp is set to On):
                 • I{CaL/K/K1}_IV.dat       - Current (peak) voltage relationship for ICaL, Ito, IKur, IKr, IKs and IK1
                 • I{CaL/K}_Vclamp_trace_Z.dat  - time courses of currents for voltage step Z
-                • I{CaL/K}_Vclamp_traces.dat   - time courses for all voltage steps, in sequence 
-       
-    • 3D cell and tissue models: 
+                • I{CaL/K}_Vclamp_traces.dat   - time courses for all voltage steps, in sequence
+
+    • 3D cell and tissue models:
         • "Outputs_X/Spatial_Results_Y" - Directory (containing spatial output data where relevant - tissue and 3D cell models)
-            • Note:                     - By default, outputs binary files. These can be converted to plain text or vtk file data 
+            • Note:                     - By default, outputs binary files. These can be converted to plain text or vtk file data
                                           using the supplied tools (see Section 6 below) - binary data of course saves space.
             • Tissue models:
-                • Vm_output_t.{bin/vtk}      - where t is the time in ms; contains the voltage for all tissue (.bin) and all space (.vtk). 
+                • Vm_output_t.{bin/vtk}      - where t is the time in ms; contains the voltage for all tissue (.bin) and all space (.vtk).
                 • Ca/CaSR_output_t.{bin/vtk} - integrated (0D) models only; spatial data of Cai or CaSR
 
             • 3D cell models:
                 • {Ca/CaSR/CaDS}_output_t.{bin/vtk} - spatial calcium data within the cell
- 
+
             • Note:                      - you can output any spatial variable in native or integrated models if you like:
                                            in the relevant main file (Tissue_native_main.cc/Tissue_integrated_main.cc/Single_cell_3D_main.cc)
                                            navigate to the spatial data outputs (search function "vtk_3D_output" or "array_1D_output") and
                                            follow the format of the variables already output, passing in an appropriate string reference.
 
-            • All maps (tissue and 3D cell models), geometries and fibres and final activation pattern (tissue models only) 
+            • All maps (tissue and 3D cell models), geometries and fibres and final activation pattern (tissue models only)
                 will also be output in "Outputs_X" for inspection, verification, and figures.
- 
+
 • Key output file contents (complete list in Full_documentation.pdf):
 
     • Outputs_X/Results_Y/Currents.dat
-    
+
         column      variable    unit
         1           time        ms
         2           voltage     mV
@@ -180,9 +206,9 @@ ____________________________________________________________________
         22          IKs         A/F
         24          IK1         A/F
         34          Cai         mM
-    
+
     • Outputs_X/Results_Y/Properties.dat
-    
+
         1           time        ms
         2           voltage     mV
         5           dv/dt_max   mV/ms
@@ -228,8 +254,8 @@ ____________________________________________________________________
         1           time        ms
         2           voltage     mV
         3           ICaL        A/F
-        4           Cai         mM 
-    
+        4           Cai         mM
+
     • Outputs_X/Parameters_Y/IK_Vclamp_trace{s/_Y}.dat
 
         1           time        ms
@@ -241,9 +267,9 @@ ____________________________________________________________________
         7           IKs         A/F
 
     • Outputs_X/Parameters_Y/Ix.dat: (Not all variables are computed for all models, so check which are relevant to your model)
-        Note: these voltage dependent functions are exaclty as produced under simulation conditions, with all modulation incorporated  
+        Note: these voltage dependent functions are exaclty as produced under simulation conditions, with all modulation incorporated
                 Use to both check/verify the implementation of modulation, and for convenience for plotting and figures etc
-        
+
         Current/file        1       2       3       4       5       6       7        8       9        10      11      12      13
         INa.dat             Vm      va_a    va_b    va_ss   va_tau  vi_1_a  vi_1_b   vi_1_ss vi_1_tau vi_2_a  vi_2_b  vi_2_ss vi_2_tau
         INaL.dat            Vm      va_a    va_b    va_ss   va_tau  vi_a    vi_b     vi_ss   vi_tau
@@ -252,7 +278,7 @@ ____________________________________________________________________
         IKur.dat            Vm      va_ss   va_tau  vi_ss   vi_tau  dynamic_g
         IKr.dat             Vm      va_ss   va_tau  v_ti
         IKs.dat             Vm      va_ss   va_tau  va_2_tau
-        IKACh.dat           Vm      va_ss   va_tau  v_ti 
+        IKACh.dat           Vm      va_ss   va_tau  v_ti
 
     • Outputs_X/Parameters_Y/Magnitide_parameters.dat and Modifier_parameters.dat contain strings with the variables and values in the files
 
@@ -260,33 +286,33 @@ ____________________________________________________________________
         “Parameters_[results_reference ]/SRF_distributions/ti_distribution.dat” – histogram of ti
         “Parameters_[results_reference ]/SRF_distributions/duration_distribution.dat” – histogram of duration
         “Parameters_[results_reference ]/SRF_distributions/NRyRo_peak_distribution.dat” – histogram of NRyRo
-        If a dynamic mode is selected, these above files will be appended with various CaSR concentrations, and contain the distribution at that CaSR. 
-            The additional file “../CaSR_dependence.dat” will also be created which tracks how the SRF parameters vary with CaSR (1 – CaSR; 2 – PSCRE; 3 – ti_sep; 
+        If a dynamic mode is selected, these above files will be appended with various CaSR concentrations, and contain the distribution at that CaSR.
+            The additional file “../CaSR_dependence.dat” will also be created which tracks how the SRF parameters vary with CaSR (1 – CaSR; 2 – PSCRE; 3 – ti_sep;
             4 – ti_width_1; 5 – ti_width_2; 6 – MD; 7 – duration_width_1; 8 – duration width 2).
 ____________________________________________________________________
 
 ____________________________________________________________________
 6) Visualsing spatial data (3D-cell models and tissue models):
 
-    If running these models, with default settings, the simulation will write only binary data for the spatial outputs 
+    If running these models, with default settings, the simulation will write only binary data for the spatial outputs
         (vtk files can be output directly by the model - see arguments below)
 
     Use the provided tools to convert the binary data to plain text or vtk data files:
-    From within the same directory where the simulation was performed, or in a parent directory containing the Outputs directory you want to analyse, 
+    From within the same directory where the simulation was performed, or in a parent directory containing the Outputs directory you want to analyse,
     run: "./bin_to_vtk_{tissue/3Dcell}” with arguments identifying the simulation and conversion settings:
 
         •	Any Reference and Results_Reference passed (so it knows which directory to look in to read binary and write data/vtk files)
         •	The variable you want to convert (i.e. Vm, Ca, CaSR etc): Variable [V]
         •	The Tissue_order and Tissue_model (tissue) or Cell_size and Sim_cell_size (3Dcell) used to perform the simulation (so it knows geometry sizes and files etc).
-        •	Which type of data to write: Write_data [On/Off] (plain text) and/or Write_vtk [On/Off] 
+        •	Which type of data to write: Write_data [On/Off] (plain text) and/or Write_vtk [On/Off]
         •	The time range and time interval over which to convert data: start_time [n1] end_time [n2] interval [n3]
         •	For tissue models, you need to also specify the model type (Model_type [native/integrated])
         •	For 3Dcell models, you can also write plain text data for specified 2D slices:
             o	Write_slices [On/Off]
             o	XZ_slice_y [x] to define the y coordinate of the XZ slice (and similar for all directions).
-        
-    Examples: 
-        "./bin_to_vtk_tissue start_time 100 end_time 200 interval 10 Model_type integrated Variable Cai Write_vtk On Write_data On. Tissue_order 2D Tissue_model basic Reference X Results_Reference Y" 
+
+    Examples:
+        "./bin_to_vtk_tissue start_time 100 end_time 200 interval 10 Model_type integrated Variable Cai Write_vtk On Write_data On. Tissue_order 2D Tissue_model basic Reference X Results_Reference Y"
         "./bin_to_vtk_3Dcell start_time 100 end_time 200 interval 10 Variable CaSR Write_vtk On Write_data On Write_slices On YZ_slice_x 5 Cell_size standard Sim_cell_size full Reference X Results_Reference Y"
 ____________________________________________________________________
 
@@ -307,7 +333,7 @@ ____________________________________________________________________
         State_Reference_read    [string]    -> reads in the state file with reference
         Settings_file           [filename]  -> read options from a settings file (see below for writing and using settings files)
         Vclamp                  [On/Off]    -> performs simple voltage clamp for ICaL and potassium currents (will need to update if more complex protocol is required)
-     
+
     • All tissue models:
         Tissue_order                    [1D/2D/3D/geo]  -> idealised 1-3D models, or geo where a geoemtry file is read in
         Tissue_model                    [string]        -> selects settings for specific tissue models, includes idealised: "basic", "conduction_velocity", "re-entry"
@@ -326,9 +352,9 @@ ____________________________________________________________________
         {stim/S2_stim}_map_file         [filename] -> define explicitly map filename to be read in for S1 or S2 stimuli
         Spatial_output_interval_data    [n ms]     -> interval to output binary spatial data (default is 5 ms)
         Spatial_output_interval_vtk     [n ms]     -> interval to output vtk data directly (default is 0, which is off)
-        Read_state                      [Off/On/phase/single_cell/ave]  -> phase = read state files for phase-distribution re-entry; 
-                                                                           single_cell = read in from single_cell written file; 
-                                                                           ave = read in from single coupled cell; 
+        Read_state                      [Off/On/phase/single_cell/ave]  -> phase = read state files for phase-distribution re-entry;
+                                                                           single_cell = read in from single_cell written file;
+                                                                           ave = read in from single coupled cell;
                                                                            On = whole tissue read
         Wirte_state                     [Off/On/phase/ave]              -> same as read, except no single_cell as cannot write single_cell state using a tissue model!
 
@@ -337,16 +363,16 @@ ____________________________________________________________________
             OY                          [x]     -> value of y-component of orientation (globally applied)
             OZ                          [x]     -> value of z-component of orientation (globally applied)  ; only 2 need be specified, as third will be defined from normalisation constraint
             Global_orientation_direction    X/Y/Z/{XY/XZ/YZ}_plus/{XY/XZ/YZ}_minus/XYZ_{ppp/ppm/pmp/mpp}  -> applies predefined OX, OY and OZ for specific global orientation directions
-            
+
     • 3D single cell models:
         Cell_size                       [string e.g. standard/thin..]   -> determines cell dimensions
-        Sim_cell_size                   [full/portion/testing]          -> determines whether full or just a portion of cell is simulated 
+        Sim_cell_size                   [full/portion/testing]          -> determines whether full or just a portion of cell is simulated
         Spatial_output_interval_data    [n ms]  -> interval to output binary spatial data (default is 5 ms)
         Spatial_output_interval_vtk     [n ms]  -> interval to output vtk data directly (default is 0, which is off)
         {volds/RyR/LTCC}_het            [Off/random]    -> to apply volds, NRyR and LTCC homogeneously in tissue, or with random variation around a mean
         Detub                           [On/Off]        -> apply variable TT denisty
-        {SERCA/NCX}_het                 [Off/On]        -> apply a sub-cellular heterogneous SERCA or NCX scale map 
-        {RyR/LTCC}_het                  [map]           -> (additional to Off/random as above); applies NRyR or LTCC heterogeneity from map (cannot be map and random simultaneous) 
+        {SERCA/NCX}_het                 [Off/On]        -> apply a sub-cellular heterogneous SERCA or NCX scale map
+        {RyR/LTCC}_het                  [map]           -> (additional to Off/random as above); applies NRyR or LTCC heterogeneity from map (cannot be map and random simultaneous)
         {RyR_het/LTCC/SERCA/NCX}_map_file   [filename]  -> define explicitly map file to scale NRyR/NLTCC or Gup/GNCX
         Read_state                      [Off/On/ave]    -> On = reads in spatial state of cell; ave = reads in average values (and applies homogeneously within cell)
         Write_state                     [OFf/On/ave]    -> same as above, but writing equivilents.
@@ -362,9 +388,9 @@ ____________________________________________________________________
         ISO_model               [string]    -> which ISO model to apply, if multiple are available
         ACh                     [0-1]       -> represents 0 to 1microM or saturating solution
         ACh_model               [string]    -> which ACh model to apply, if multiple are available
-        Agent                   [string]    -> apply pharmacologiocal agent 
-        Remdelling              [string]    -> apply remodelling 
-        Mutation                [string]    -> apply mutation 
+        Agent                   [string]    -> apply pharmacologiocal agent
+        Remdelling              [string]    -> apply remodelling
+        Mutation                [string]    -> apply mutation
         Spatial_gradient        [string]    -> apply a spatial gradient model (e.g apico-basal het); in tissue, requires a map; in single cell, requires also:
             Spatial_gradient_proportion [0-1] to determine where the single cell lies within the gradient
 
@@ -374,41 +400,41 @@ ____________________________________________________________________
             Ix_vi_ss_shift          [x mV]      -> shifts the voltage dependence of the steady-state of inactivation gate for current x
             Ix_va_tau_scale         [x]         -> scales time constant of activation gate for current x
             Ix_vi_tau_scale         [x]         -> scales time constant of inactivation gate for current x
-            RyR_Po, LTCC_po         [x]         -> integrated cell models only; scales the open transition rate. 
+            RyR_Po, LTCC_po         [x]         -> integrated cell models only; scales the open transition rate.
 
     • Tissue modulation (Tissue model only!):
         Dscale                  [x]         -> scales D1 (homogeneously if no map is set); D_AR preserved, so D2 calculated from scaled D1
         D_AR_scale              [x]         -> scales D_AR (D1 = D/D_AR) (homogeneously if no mpa is set)
-        Dscale_mod_map          [On/Off]    -> Apply Dscale according to map; map is floats, where map = 0, Dscale_local = 1(=D1) (i.e. control), 
+        Dscale_mod_map          [On/Off]    -> Apply Dscale according to map; map is floats, where map = 0, Dscale_local = 1(=D1) (i.e. control),
                                                 where map = 1, Dscale_local = Dscale(=D1*Dscale) (i.e. fully scaled according to value in Dscale)
         Dscale_mod_map_file     [string]    -> Define explicitly the filename containing the Dscale modulation map
-        D_AR_scale_mod_map      [On/Off]    -> Apply D_AR_scale according to map; map is floats, where map = 0, D_AR_scale_local = 1(=D_AR) (i.e. control), 
+        D_AR_scale_mod_map      [On/Off]    -> Apply D_AR_scale according to map; map is floats, where map = 0, D_AR_scale_local = 1(=D_AR) (i.e. control),
                                                 where map = 1, D_AR_scale_local = D_AR_scale(=D_AR*D_AR_scale) (i.e. fully scaled according to value in Dscale)
         D_AR_scale_mod_map_file [string]    -> Define explicitly the filename containing the D_AR_scale modulation map
-        {ISO/ACh/Remodelling/Dscale_mod/D_AR_scale_mod}_map  [On/Off]  -> Whether to apply single-cell modulations homogeneously to tissue, or by map 
+        {ISO/ACh/Remodelling/Dscale_mod/D_AR_scale_mod}_map  [On/Off]  -> Whether to apply single-cell modulations homogeneously to tissue, or by map
                                                                         (exactly as with D_scale: map determines where zero-maximum effect of modulation is applied.
-        Direct_modulation_map   [On/Off]    -> Whether to apply direct modulation (X_scale;Ix_va_ss_shift;Ix_vi_ss_shift;Ix_va_tau_scale;Ix_vi_tau_scale) 
+        Direct_modulation_map   [On/Off]    -> Whether to apply direct modulation (X_scale;Ix_va_ss_shift;Ix_vi_ss_shift;Ix_va_tau_scale;Ix_vi_tau_scale)
                                                 homogeneously or by map. MAP MUST BE INTEGER for direct_mod on or off, not continuos (as with above maps)
         {X}_map_file            [filename]  -> explicitly set the file for the modulation map X (X=ISO/ACh/Remodelling .....)
 ____________________________________________________________________
 
 ____________________________________________________________________
 8) Using a settings file
-    
+
     You can use settings files to store the options passed in, for quick reproduction etc
     These files can be anywhere, where the full path of the file must be passed in after "Settings_file" argument.
     You can use a settings file AND command line arguments:
         "Settings_file" argument must be passed FIRST (this is the only restriction on order of arguments)
-        Any arguments passed after this will supplement or overwrite the options in the file 
+        Any arguments passed after this will supplement or overwrite the options in the file
         -> command line args supersede settings files if the same argument is in both.
 
     Settings files must have the following format as a plain text document,
     new line for each argument, spaces or tabs to separate arg and value:
-    
+
         Number of args
         ARG 1   Value 1
-        ARG 2   Value 2 
-    
+        ARG 2   Value 2
+
     Example: An example settings_file could have contents:
         3
         BCL 345
@@ -419,4 +445,3 @@ ____________________________________________________________________
         ./model_single_native Settings_file [filename] Remodelling AF_GB
         will apply BCL = 345; Model = hAM_CRN; Results_Reference = file_test; Remodelling = AF_GB
 ____________________________________________________________________
-        
