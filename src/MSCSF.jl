@@ -92,8 +92,9 @@ end
     ylabel --> col
     linewidth --> 1
     for (i, df) in enumerate(groupby(get_df(o), "run"))
-        isnothing(runs) && continue
-        i in runs && @series df.t, df[!, col]
+        if isnothing(runs) || i in runs
+            @series df.t, df[!, col]
+        end
     end
 end
 
