@@ -3,6 +3,7 @@
 ## Usage
 
 - REQUIREMENT: You've run `CODE/Makefile` to generate the `CODE/model_single_3D` executable.
+  - Makefiles are finnicky...this is the kind of thing Claude Code is good at figuring out.
 - Change directory to root of repo, then:
 
 ```julia
@@ -11,13 +12,14 @@ using Pkg
 Pkg.activate(".")
 Pkg.instantiate()
 
-# Running 10 simulations of "low" level
-using MSCSF, ProgressMeter
 
-l = sims_low()  # See also: sims_high()
+# Running 10 simulations of "high" level
+using MSCSF
 
-@showprogress for i in 1:10
-    run(l)
+h = sims_high()  # See also: sims_low()
+
+for i in 1:10
+    run(h)
 end
 ```
 

@@ -3,7 +3,7 @@ module MSCSF
 using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultApplication
 
 export Model3D, Model3DSimulations, sims_low, sims_high, get_df,
-    reference, results, open_reference, open_results
+    reference, results, open_reference, open_results, stats
 
 #-----------------------------------------------------------------------------# init
 DIR::String = ""  # where data goes, e.g. $DIR/$Reference/$Results_Reference/
@@ -19,6 +19,7 @@ function __init__()
 end
 
 #-----------------------------------------------------------------------------# Model3D
+# Specification of a single run of the 3D model
 @kwdef mutable struct Model3D
     bin::String = joinpath(@__DIR__, "..", "CODE", "model_single_3D")
     Model::String = "minimal"
@@ -55,10 +56,12 @@ Base.run(o::Model3D) = cd(() -> run(Cmd(o)), DIR)
 reference(o::Model3D) = mkpath(joinpath(DIR, "Outputs_3Dcell_$(o.Reference)"))
 results(o::Model3D) = mkpath(joinpath(DIR, "Outputs_3Dcell_$(o.Reference)", "Results_$(o.Results_Reference)"))
 
+# Opens the "Reference" or "Results" directory in your file browser
 open_reference(o) = DefaultApplication.open(reference(o))
 open_results(o) = DefaultApplication.open(results(o))
 
 #-----------------------------------------------------------------------------# Model3DSimulations
+# Specification of multiple runs for generating SR
 struct Model3DSimulations
     Reference::String
     prepace::Model3D
@@ -79,6 +82,18 @@ struct Model3DSimulations
         runner.Results_Reference = "run_" * lpad(1, 4, '0')
         runner.Read_state = "On"
         new(Reference, prepace, prepace_full, runner)
+    end
+end
+
+@recipe function f(o::Model3DSimulations, col="RyR_OA"; runs=nothing)
+    title --> "$(o.Reference) Simulations"
+    label --> ""
+    xlabel --> "Time (ms)"
+    ylabel --> col
+    linewidth --> 1
+    for (i, df) in enumerate(groupby(get_df(o), "run"))
+        isnothing(runs) && continue
+        i in runs && @series df.t, df[!, col]
     end
 end
 
@@ -107,26 +122,27 @@ function Base.run(o::Model3DSimulations)
     run(o.runner)
 end
 
-function sims_low()
+#-----------------------------------------------------------------------------# sims_low
+# Total_time is passed to the `runner`
+function sims_low(; Total_time=1300)
     common = (ISO = 0, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 1000)
     prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
     prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
-    runner = Model3D(; Beats=1, Sim_cell_size="full", common...)
+    runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
     Model3DSimulations("sr_low", prepace, prepace_full, runner)
 end
 
-# Integrated_model_spatial_minimal_BCL_1000_region_EPI_ISO_0.00_ACh_0.00_remodelling_none_drug_none_mut_none_env_intact_dimen_15_20_65_ref_none_state.dat
-
-function sims_high()
+#-----------------------------------------------------------------------------# sims_high
+function sims_high(; Total_time=1300)
     common = (ISO = 1, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 350)
     prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
     prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
-    runner = Model3D(; Beats=1, Sim_cell_size="full", common...)
+    runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
     Model3DSimulations("sr_high", prepace, prepace_full, runner)
 end
 
 #-----------------------------------------------------------------------------# get_df
-function get_df(Reference::String, select=1:10)
+function get_df(Reference::String, select=1:12)
     result_dirs = filter(readdir(joinpath(DIR, "Outputs_3Dcell_$Reference"))) do dir
         startswith(dir, "Results_run_")
     end
@@ -168,7 +184,34 @@ cru_cols = [
     "JCab_cyto",       # background Ca²⁺ current, cyto
     "JCab_ss"          # background Ca²⁺ current, subspace
 ]
+#-----------------------------------------------------------------------------# stats
+# Applied to a SubDataFrame (single run)
+function _stats(df, threshold = 0.05, skip = 100)
+    df
+    # Determine SR threshold for APD90, start/stop of SR
+    cutoff = threshold * (maximum(df.Ca_cyto) - minimum(df.Ca_cyto)) + minimum(df.Ca_cyto)
 
-# TODO: fit distribution to DataFrame column(s) RyR_OA/RyR_OI
+    # Drop APD90
+    i = findfirst(>(skip), df.t)
+    i = findnext(<(cutoff), df.Ca_cyto, i)  # Find index of first value below cutoff
+    df2 = @view df[i:end, :]
+
+    # Get stats
+    ti_i = findfirst(>(cutoff), df2.Ca_cyto)
+    ti = isnothing(ti_i) ? -1 : df2.t[ti_i]
+    tf_i = findlast(>(cutoff), df2.Ca_cyto)
+    tf = isnothing(tf_i) ? -1 : df2.t[tf_i]
+    λ = isnothing(ti_i) ? -1 : tf - ti
+    peak = maximum(df2.Ca_cyto)
+    plat = median(df2.Ca_cyto)
+    tp = df2.t[findfirst(==(peak), df2.Ca_cyto)]
+    (; ti, tf, λ, tp, peak, plat)
+end
+
+stats(df) = combine(groupby(df, "run")) do sdf
+    _stats(sdf)
+end
+
+stats(o::Model3DSimulations) = stats(get_df(o))
 
 end
