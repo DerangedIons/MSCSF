@@ -10,7 +10,7 @@ using MSCSF, Distributions, HypothesisTests, StatsPlots, DataFrames, Multivariat
 sim = sims_high()
 
 # How many runs to simulate
-n = 10
+n = 100
 
 # !!! This will take a while depending on n !!!
 @elapsed for i in 1:n
@@ -29,6 +29,7 @@ df = get_df(sim)
 # Statistics DataFrame with columns: run, ti, tf, λ, tp, peak, plat
 # If no SR: ti, tf, λ = -1
 df_stats = stats(df)
+stats_dict = Dict(row.run => (; ti=row.ti, tf=row.tf, λ=row.λ, tp=row.tp, peak=row.peak, plat=row.plat) for row in eachrow(df_stats))
 df_stats_sr = filter(row -> row.ti != -1, df_stats)
 
 # Estimate of Prob(SR)
@@ -37,6 +38,14 @@ pscr = nrow(df_stats_sr) / nrow(df_stats)
 # Get df with only runs that had SR
 sr_runs = df_stats.run[df_stats.ti .!= -1]
 df_sr = filter(x -> x.run in sr_runs, df)
+
+# Get only the SR part from df_sr (drop timesteps before ti, after tf)
+df_sr_filtered = filter(df_sr) do row
+    (; ti, tf) = stats_dict[row.run]
+    ti == -1 ? false : ti ≤ row.t ≤ tf
+end
+
+plot(df_stats.ti, df_stats.tf, seriestype=:scatter, xlabel="ti", ylabel="tf", title="SR start and end times")
 
 
 #-----------------------------------------------------------------------------# Fit Distributions
@@ -72,7 +81,7 @@ w = reduce(hcat, _log.(sub.RyR_OA) for sub in groupby(df_sr, "run"))
 k = 25
 
 # Fit PCA model
-model = fit(PCA, w; maxoutdim=k, pratio=0.99);
+model = fit(PCA, w; maxoutdim=k, pratio=0.999);
 @info "N components: $(outdim(model))"
 
 z = MultivariateStats.transform(model, w)
@@ -101,7 +110,7 @@ plot(
 
 # Closer look at generated waveforms
 plot(
-    plot(sim, runs=1:9, layout=9, title="Sim"),
-    plot(waveforms[:, 1:9], lab="", title="Gen", layout=9),
+    plot(sim, runs=1:12, layout=12, title="Sim"),
+    plot(waveforms[:, 1:12], lab="", title="Gen", layout=12),
     xlab="", ylab="", link=:all, linewidth=0.5, ticks=false, xlim=(400, Inf)
 )

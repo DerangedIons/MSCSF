@@ -86,6 +86,18 @@ struct Model3DSimulations
     end
 end
 
+function Model3DSimulations(; ISO=1, BCL=1000)
+    common = (Model="minimal", Jup_scale=1, tau_ss_type="medium_fast", ISO, BCL)
+    prepace =      Model3D(; Beats=40, Sim_cell_size="testing", common...)
+    prepace_full = Model3D(; Beats=4,  Sim_cell_size="full",    common...)
+    runner =       Model3D(; Beats=1,  Sim_cell_size="full",    common...)
+    Model3DSimulations("sr_$(BCL)_$(ISO)", prepace, prepace_full, runner)
+end
+
+all_simulations() = Dict(
+    BCL => Dict(ISO => Model3DSimulations(; ISO, BCL) for ISO in 0:1) for BCL in 300:200:1500
+)
+
 @recipe function f(o::Model3DSimulations, col="RyR_OA"; runs=nothing)
     title --> "$(o.Reference) Simulations"
     label --> ""
