@@ -2,3 +2,5 @@ CODE/*
 data/
 .claude
 *.DS_Store
+*.log
+*.png

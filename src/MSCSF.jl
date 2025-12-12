@@ -52,7 +52,15 @@ function Base.Cmd(o::Model3D)
     Cmd(out)
 end
 
-Base.run(o::Model3D) = cd(() -> run(Cmd(o)), DIR)
+function Base.run(o::Model3D)
+    # Optimal threads: total cores ÷ N simultaneous simulations
+    n_threads = max(1, div(Sys.CPU_THREADS, length(all_simulations())))
+    cd(DIR) do
+        withenv("OMP_NUM_THREADS" => string(n_threads)) do
+            run(Cmd(o))
+        end
+    end
+end
 
 reference(o::Model3D) = mkpath(joinpath(DIR, "Outputs_3Dcell_$(o.Reference)"))
 results(o::Model3D) = mkpath(joinpath(DIR, "Outputs_3Dcell_$(o.Reference)", "Results_$(o.Results_Reference)"))
@@ -94,8 +102,9 @@ function Model3DSimulations(; ISO=1, BCL=1000)
     Model3DSimulations("sr_$(BCL)_$(ISO)", prepace, prepace_full, runner)
 end
 
+# Dict of (settings::NamedTuple => Model3DSimulations) for all combinations of ISO and BCL
 all_simulations() = Dict(
-    BCL => Dict(ISO => Model3DSimulations(; ISO, BCL) for ISO in 0:1) for BCL in 300:200:1500
+    (; ISO, BCL) => Model3DSimulations(; ISO, BCL) for (ISO, BCL) in Iterators.product(0:1, 300:200:1500)
 )
 
 @recipe function f(o::Model3DSimulations, col="RyR_OA"; runs=nothing)
