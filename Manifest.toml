@@ -2,7 +2,7 @@
 
 julia_version = "1.12.2"
 manifest_format = "2.0"
-project_hash = "dd5ede9661fb8edc5d91ea30bb0f08cacee909eb"
+project_hash = "ecb0459bb5e1d900917ccb6d09744fb3090c3397"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -754,7 +754,7 @@ uuid = "856f044c-d86e-5d09-b602-aeab76dc8ba7"
 version = "2025.2.0+0"
 
 [[deps.MSCSF]]
-deps = ["CSV", "DataFrames", "DefaultApplication", "Distributions", "HypothesisTests", "Scratch", "Statistics", "StatsPlots"]
+deps = ["CSV", "DataFrames", "DefaultApplication", "Distributions", "HypothesisTests", "MultivariateStats", "Scratch", "Statistics", "StatsPlots"]
 path = "."
 uuid = "6120b531-5746-4535-a2eb-beaf5de45c83"
 version = "0.0.1"

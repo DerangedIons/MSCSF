@@ -1,6 +1,7 @@
 module MSCSF
 
-using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultApplication
+using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultApplication,
+    MultivariateStats, LinearAlgebra
 
 export Model3D, Model3DSimulations, sims_low, sims_high, get_df,
     reference, results, open_reference, open_results, stats
