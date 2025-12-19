@@ -2,10 +2,12 @@
 
 BCL, ISO = parse.(Int, ARGS)
 
-using MSCSF
+using CellSims
 
-sims = MSCSF.all_simulations()
+sims = CellSims.all_simulations()
 
-sim = sims[BCL][ISO]
+sim = only(filter(sims) do sim
+    sim.ISO == ISO && sim.BCL == BCL
+end)
 
-MSCSF.run(sim)
+CellSims.run(sim)

@@ -1,10 +1,10 @@
-module MSCSF
+module CellSims
 
 using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultApplication,
     MultivariateStats, LinearAlgebra
 
-export Model3D, Model3DSimulations, sims_low, sims_high, get_df,
-    reference, results, open_reference, open_results, stats
+export Model3D, Model3DSimulations,
+    reference, results, open_reference, open_results, all_simulations, get_df
 
 #-----------------------------------------------------------------------------# init
 DIR::String = ""  # where data goes, e.g. $DIR/$Reference/$Results_Reference/
@@ -19,7 +19,7 @@ function __init__()
     mkpath(joinpath(STATE_AND_GEOMETRY_FILES, "State_files", "Single_cell"))
 end
 
-#-----------------------------------------------------------------------------# Model3D
+#-------------------------------------------------all----------------------------# Model3D
 # Specification of a single run of the 3D model
 @kwdef mutable struct Model3D
     bin::String = joinpath(@__DIR__, "..", "CODE", "model_single_3D")
@@ -70,7 +70,7 @@ open_reference(o) = DefaultApplication.open(reference(o))
 open_results(o) = DefaultApplication.open(results(o))
 
 #-----------------------------------------------------------------------------# Model3DSimulations
-# Specification of multiple runs for generating SR
+# Specification for generating SR datasets
 struct Model3DSimulations
     Reference::String
     prepace::Model3D
@@ -94,18 +94,21 @@ struct Model3DSimulations
     end
 end
 
-function Model3DSimulations(; ISO=1, BCL=1000)
-    common = (Model="minimal", Jup_scale=1, tau_ss_type="medium_fast", ISO, BCL)
+Base.show(io::IO, o::Model3DSimulations) = print(io, "Model3DSimulations: $(repr(o.Reference))")
+
+
+# Use ord model?
+# Ca input to generative PCA model is last row of prepace_full *Ca_NSR*
+function Model3DSimulations(; ISO=1, BCL=1000, Total_time=2000)
+    common = (Model="minimal", Jup_scale=1, tau_ss_type="medium_fast", ISO, BCL, Total_time)
     prepace =      Model3D(; Beats=40, Sim_cell_size="testing", common...)
-    prepace_full = Model3D(; Beats=4,  Sim_cell_size="full",    common...)
-    runner =       Model3D(; Beats=1,  Sim_cell_size="full",    common...)
+    prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
+    runner =       Model3D(; Beats=1, Sim_cell_size="full", common...)
     Model3DSimulations("sr_$(BCL)_$(ISO)", prepace, prepace_full, runner)
 end
 
 # Dict of (settings::NamedTuple => Model3DSimulations) for all combinations of ISO and BCL
-all_simulations() = Dict(
-    (; ISO, BCL) => Model3DSimulations(; ISO, BCL) for (ISO, BCL) in Iterators.product(0:1, 300:200:1500)
-)
+all_simulations() = vec([Model3DSimulations(; ISO, BCL) for (ISO, BCL) in Iterators.product(0:1, 300:200:1500)])
 
 @recipe function f(o::Model3DSimulations, col="RyR_OA"; runs=nothing)
     title --> "$(o.Reference) Simulations"
@@ -145,24 +148,25 @@ function Base.run(o::Model3DSimulations)
     run(o.runner)
 end
 
-#-----------------------------------------------------------------------------# sims_low
-# Total_time is passed to the `runner`
-function sims_low(; Total_time=1300)
-    common = (ISO = 0, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 1000)
-    prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
-    prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
-    runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
-    Model3DSimulations("sr_low", prepace, prepace_full, runner)
-end
 
-#-----------------------------------------------------------------------------# sims_high
-function sims_high(; Total_time=1300)
-    common = (ISO = 1, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 350)
-    prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
-    prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
-    runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
-    Model3DSimulations("sr_high", prepace, prepace_full, runner)
-end
+# #-----------------------------------------------------------------------------# sims_low
+# # Total_time is passed to the `runner`
+# function sims_low(; Total_time=1300)
+#     common = (ISO = 0, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 1000)
+#     prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
+#     prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
+#     runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
+#     Model3DSimulations("sr_low", prepace, prepace_full, runner)
+# end
+
+# #-----------------------------------------------------------------------------# sims_high
+# function sims_high(; Total_time=1300)
+#     common = (ISO = 1, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 350)
+#     prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
+#     prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
+#     runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
+#     Model3DSimulations("sr_high", prepace, prepace_full, runner)
+# end
 
 #-----------------------------------------------------------------------------# get_df
 function get_df(Reference::String, select=1:12)
@@ -208,33 +212,105 @@ cru_cols = [
     "JCab_ss"          # background Ca²⁺ current, subspace
 ]
 #-----------------------------------------------------------------------------# stats
-# Applied to a SubDataFrame (single run)
-function _stats(df, threshold = 0.05, skip = 100)
-    df
-    # Determine SR threshold for APD90, start/stop of SR
-    cutoff = threshold * (maximum(df.Ca_cyto) - minimum(df.Ca_cyto)) + minimum(df.Ca_cyto)
+function _get_apd90(df, threshold = 0.05)
+    a, b = extrema(df.Vm)
+    cutoff = threshold * (b - a) + a
 
-    # Drop APD90
-    i = findfirst(>(skip), df.t)
-    i = findnext(<(cutoff), df.Ca_cyto, i)  # Find index of first value below cutoff
+    i = findfirst(==(b), df.Vm)  # Find index of max Vm
+    ti = findnext(<(cutoff), df.Vm, i)  # Find index when Vm falls below cutoff after max
+    isnothing(ti) ? -1 : df.t[ti]
+end
+get_apd90(df::DataFrame) = rename!(combine(_get_apd90, groupby(df, "run")), :x1 => :apd90)
+
+
+# Applied to a SubDataFrame (single run)
+function _get_colman_stats(df, threshold = 0.05)
+    i = findfirst(>(_get_apd90(df, threshold)), df.t)
     df2 = @view df[i:end, :]
 
-    # Get stats
-    ti_i = findfirst(>(cutoff), df2.Ca_cyto)
+    a, b = extrema(df.RyR_OA)
+    cutoff = threshold * (b - a) + a
+
+    ti_i = findfirst(>(cutoff), df2.RyR_OA)
     ti = isnothing(ti_i) ? -1 : df2.t[ti_i]
-    tf_i = findlast(>(cutoff), df2.Ca_cyto)
+    tf_i = findlast(>(cutoff), df2.RyR_OA)
     tf = isnothing(tf_i) ? -1 : df2.t[tf_i]
     λ = isnothing(ti_i) ? -1 : tf - ti
-    peak = maximum(df2.Ca_cyto)
-    plat = median(df2.Ca_cyto)
-    tp = df2.t[findfirst(==(peak), df2.Ca_cyto)]
+    peak = maximum(df2.RyR_OA)
+    plat = median(df2.RyR_OA)
+    tp = df2.t[findfirst(==(peak), df2.RyR_OA)]
     (; ti, tf, λ, tp, peak, plat)
 end
 
-stats(df) = combine(groupby(df, "run")) do sdf
-    _stats(sdf)
+get_colman_stats(df::DataFrame) = combine(groupby(df, "run")) do sdf
+    _get_colman_stats(sdf)
 end
 
-stats(o::Model3DSimulations) = stats(get_df(o))
+#-----------------------------------------------------------------------------# analyze
+# k = max number of principal components to keep
+# pratio = proportion of variance to explain
+function analyze(sims::Model3DSimulations)
+    # @info "Loading DataFrame..."
+    df = get_df(sims)
+    df_stats = get_colman_stats(df)
+    stats_dict = Dict(row.run => (; ti=row.ti, tf=row.tf, λ=row.λ, tp=row.tp, peak=row.peak, plat=row.plat) for row in eachrow(df_stats))
+    df_stats_sr = filter(row -> row.ti != -1, df_stats)
+    # Estimate of Prob(SR)
+    pscr = nrow(df_stats_sr) / nrow(df_stats)
+    # @info "Prob(SR) = $(round(pscr, digits=2))"
+
+    # Get df with only runs that had SR
+    sr_runs = df_stats.run[df_stats.ti .!= -1]
+    df_sr = filter(x -> x.run in sr_runs, df)
+
+    init = df[1, 2:end]
+    # @info "Initial conditions: $init"
+
+    # Get only the SR part from df_sr (drop timesteps before ti, after tf)
+    df_sr_filtered = filter(df_sr) do row
+        (; ti, tf) = stats_dict[row.run]
+        ti == -1 ? false : ti ≤ row.t ≤ tf
+    end
+
+    return (;
+        df,             # All data from all runs
+        df_stats,       # Statistics (in terms of Colman's parameterization) for all runs
+        stats_dict,     # run::Int => (stats...)
+        df_stats_sr,    # Statistics only for runs that had SR
+        pscr,           # Prob(SR)
+        df_sr,          # Data only from runs that had SR
+        df_sr_filtered, # Data only from runs that had SR, filtered to only include SR portion (ti to tf)
+        init            # Initial states
+    )
+end
+
+#-----------------------------------------------------------------------------# Generative PCA
+struct ApproxLog
+    eps::Float64
+end
+(o::ApproxLog)(x) = log(x + o.eps)
+inverse(o::ApproxLog) = x -> exp(x) - o.eps
+
+inverse(::typeof(identity)) = identity
+
+
+function fit_generative_pca(df_sr::AbstractDataFrame, f = ApproxLog(0.1); k=25, pratio=.999)
+    isempty(df_sr) && error("df_sr is empty; cannot fit PCA model")
+    f2 = inverse(f)
+
+    w = reduce(hcat, f.(sub.RyR_OA) for sub in groupby(df_sr, "run"))
+
+    model = fit(PCA, w; maxoutdim=k, pratio);
+
+    z = MultivariateStats.transform(model, w)
+
+    μ = vec(mean(z, dims=2))
+    Σ = cov(z; dims=2)
+    dist = MvNormal(μ, Symmetric(Σ))
+
+    minval = minimum(df_sr.RyR_OA)
+
+    rand_waveform() = max.(minval, reconstruct(model, rand(dist)))
+end
 
 end

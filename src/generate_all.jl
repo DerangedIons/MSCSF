@@ -3,19 +3,18 @@
 
 N = parse(Int, ARGS[1])
 
-using MSCSF
+using CellSims
 
-sims = MSCSF.all_simulations()
+sims = CellSims.all_simulations()
 
 @info "Running $(length(sims)) simulation settings, $N times each ($(length(sims) * N) total runs)"
 
-for (settings, sim) in sims
-    ISO, BCL = settings.ISO, settings.BCL
-    @info "Running setting: BCL=$BCL, ISO=$ISO ($N times)"
-
-    for i in 1:N
-        @info"████████████████████████████████████████████████ Run $i/$N..."
-        MSCSF.run(sim)
+for i in 1:N
+    @info "████████████████████████████████████████████████ Run $i/$N..."
+    for sim in sims
+        ISO, BCL = sim.runner.ISO, sim.runner.BCL
+        @info "Running setting: BCL=$BCL, ISO=$ISO ($N times)"
+        CellSims.run(sim)
     end
 end
 
