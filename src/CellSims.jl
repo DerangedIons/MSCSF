@@ -100,12 +100,18 @@ Base.show(io::IO, o::Model3DSimulations) = print(io, "Model3DSimulations: $(repr
 # Use ord model?
 # Ca input to generative PCA model is last row of prepace_full *Ca_NSR*
 function Model3DSimulations(; ISO=1, BCL=1000, Total_time=2000)
-    common = (Model="minimal", Jup_scale=1, tau_ss_type="medium_fast", ISO, BCL, Total_time)
+    common = (Model="minimal", Jup_scale=1, tau_ss_type="medium_fast", ISO, BCL)
     prepace =      Model3D(; Beats=40, Sim_cell_size="testing", common...)
     prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
-    runner =       Model3D(; Beats=1, Sim_cell_size="full", common...)
+    runner =       Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
     Model3DSimulations("sr_$(BCL)_$(ISO)", prepace, prepace_full, runner)
 end
+
+    # common = (ISO = 0, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 1000)
+    # prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
+    # prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
+    # runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
+    # Model3DSimulations("sr_low", prepace, prepace_full, runner)
 
 # Dict of (settings::NamedTuple => Model3DSimulations) for all combinations of ISO and BCL
 all_simulations() = vec([Model3DSimulations(; ISO, BCL) for (ISO, BCL) in Iterators.product(0:1, 300:200:1500)])
