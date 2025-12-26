@@ -1,4 +1,6 @@
-# Example: julia --project=. src/generate.jl 300 1
+# Usage: julia --project=. src/generate.jl BCL ISO [N]
+
+# Example: julia --project=. src/generate.jl 300 1 10
 
 BCL = parse(Int, ARGS[1])
 ISO = parse(Int, ARGS[2])

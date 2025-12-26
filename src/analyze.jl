@@ -4,15 +4,29 @@ using CellSims, ProgressMeter, OrderedCollections, Plots
 
 sims = all_simulations()
 
-results = OrderedDict()
+out = OrderedDict()
 
-@showprogress for sim in sims
-    results[sim.Reference] = CellSims.analyze(sim)
+for (i, sim) in enumerate(sims)
+    @info "Analyzing simulation $(i)/$(length(sims)): BCL=$(sim.runner.BCL), ISO=$(sim.runner.ISO)..."
+    n = length(results(sim))
+
+    @info "    Number of runs: $n"
+
+    if n == 0
+        @warn "    No runs!  Skipping analysis."
+        continue
+    end
+
+
+    out[sim.Reference] = CellSims.analyze(sim)
 end
 
-init_Ca_cyto = OrderedDict(
-    k => v.df.Ca_cyto[400] for (k, v) in results
-)
+@info "Analysis complete!  $(length(out)) / $(length(sims)) simulations analyzed."
+
+
+# init_Ca_cyto = OrderedDict(
+#     k => v.df.Ca_cyto[400] for (k, v) in results
+# )
 
 # v = collect(values(init_Ca_cyto))
 

@@ -1,7 +1,7 @@
 module CellSims
 
 using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultApplication,
-    MultivariateStats, LinearAlgebra
+    MultivariateStats, LinearAlgebra, OrderedCollections
 
 export Model3D, Model3DSimulations,
     reference, results, open_reference, open_results, all_simulations, get_df
@@ -66,8 +66,8 @@ reference(o::Model3D) = mkpath(joinpath(DIR, "Outputs_3Dcell_$(o.Reference)"))
 results(o::Model3D) = mkpath(joinpath(DIR, "Outputs_3Dcell_$(o.Reference)", "Results_$(o.Results_Reference)"))
 
 # Opens the "Reference" or "Results" directory in your file browser
-open_reference(o) = DefaultApplication.open(reference(o))
-open_results(o) = DefaultApplication.open(results(o))
+open_reference(o::Model3D) = DefaultApplication.open(reference(o))
+open_results(o::Model3D) = DefaultApplication.open(results(o))
 
 #-----------------------------------------------------------------------------# Model3DSimulations
 # Specification for generating SR datasets
@@ -96,9 +96,10 @@ end
 
 Base.show(io::IO, o::Model3DSimulations) = print(io, "Model3DSimulations: $(repr(o.Reference))")
 
+open_reference(o::Model3DSimulations) = DefaultApplication.open(reference(o))
 
-# Use ord model?
-# Ca input to generative PCA model is last row of prepace_full *Ca_NSR*
+# TODO: Use ord model?
+# TODO: Ca input to generative PCA model is last row of prepace_full *Ca_NSR*
 function Model3DSimulations(; ISO=1, BCL=1000, Total_time=2000)
     common = (Model="minimal", Jup_scale=1, tau_ss_type="medium_fast", ISO, BCL)
     prepace =      Model3D(; Beats=40, Sim_cell_size="testing", common...)
@@ -107,13 +108,7 @@ function Model3DSimulations(; ISO=1, BCL=1000, Total_time=2000)
     Model3DSimulations("sr_$(BCL)_$(ISO)", prepace, prepace_full, runner)
 end
 
-    # common = (ISO = 0, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 1000)
-    # prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
-    # prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
-    # runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
-    # Model3DSimulations("sr_low", prepace, prepace_full, runner)
 
-# Dict of (settings::NamedTuple => Model3DSimulations) for all combinations of ISO and BCL
 all_simulations() = vec([Model3DSimulations(; ISO, BCL) for (ISO, BCL) in Iterators.product(0:1, 300:200:1500)])
 
 @recipe function f(o::Model3DSimulations, col="RyR_OA"; runs=nothing)
@@ -131,6 +126,7 @@ end
 
 
 reference(o::Model3DSimulations) = reference(o.runner)
+
 function results(o::Model3DSimulations)
     filter(readdir(reference(o))) do dir
         startswith(dir, "Results_run_")
@@ -174,20 +170,34 @@ end
 #     Model3DSimulations("sr_high", prepace, prepace_full, runner)
 # end
 
-#-----------------------------------------------------------------------------# get_df
-function get_df(Reference::String, select=1:12)
-    result_dirs = filter(readdir(joinpath(DIR, "Outputs_3Dcell_$Reference"))) do dir
-        startswith(dir, "Results_run_")
-    end
-    files = joinpath.(DIR, "Outputs_3Dcell_$Reference", result_dirs, Ref("CRU.txt"))
-    dfs = [CSV.read(file, DataFrame; select, header=false) for file in files]
-    rename!.(dfs, Ref(cru_cols[select]))
-    df = vcat(dfs...; cols=:union, source="run")
-    select!(df, "run", All())
+#-----------------------------------------------------------------------------# loading DataFrames
+function load_cru_file(path::String)
+    isfile(path) || error("File does not exist: $path")
+    df = CSV.read(path, DataFrame; header=false)
+    rename!(df, cru_cols)
+end
+function load_cru_files(paths::Vector{String})
+    dfs = [load_cru_file(file) for file in paths]
+    vcat(dfs...; cols=:union, source="run")
 end
 
-get_df(o::Model3D) = get_df(o.Reference)
-get_df(o::Model3DSimulations) = get_df(o.Reference)
+function get_prepace_df(o::Model3DSimulations)
+    file = joinpath(reference(o), "Results_prepace", "CRU.txt")
+    load_cru_file(file)
+end
+
+function get_prepace_full_df(o::Model3DSimulations)
+    file = joinpath(reference(o), "Results_prepace_full", "CRU.txt")
+    load_cru_file(file)
+end
+
+function get_df(o::Model3DSimulations)
+    dirs = filter(readdir(reference(o))) do dir
+        startswith(dir, "Results_run_")
+    end
+    files = joinpath.(reference(o), dirs, Ref("CRU.txt"))
+    load_cru_files(files)
+end
 
 # Field names for CRU.txt output files
 cru_cols = [
@@ -253,41 +263,27 @@ get_colman_stats(df::DataFrame) = combine(groupby(df, "run")) do sdf
 end
 
 #-----------------------------------------------------------------------------# analyze
-# k = max number of principal components to keep
-# pratio = proportion of variance to explain
-function analyze(sims::Model3DSimulations)
-    # @info "Loading DataFrame..."
-    df = get_df(sims)
-    df_stats = get_colman_stats(df)
-    stats_dict = Dict(row.run => (; ti=row.ti, tf=row.tf, λ=row.λ, tp=row.tp, peak=row.peak, plat=row.plat) for row in eachrow(df_stats))
-    df_stats_sr = filter(row -> row.ti != -1, df_stats)
-    # Estimate of Prob(SR)
-    pscr = nrow(df_stats_sr) / nrow(df_stats)
-    # @info "Prob(SR) = $(round(pscr, digits=2))"
+function analyze(sim::Model3DSimulations)
+    out = OrderedDict()
 
-    # Get df with only runs that had SR
-    sr_runs = df_stats.run[df_stats.ti .!= -1]
-    df_sr = filter(x -> x.run in sr_runs, df)
+    df = get_df(sim)
+    prepace = get_prepace_df(sim)
+    prepace_full = get_prepace_full_df(sim)
 
-    init = df[1, 2:end]
-    # @info "Initial conditions: $init"
+    out[:df] = df
+    out[:prepace] = prepace
+    out[:prepace_full] = prepace_full
+    out[:colman] = get_colman_stats(df)
+    out[:apd90] = get_apd90(df)
+    out[:n] = length(unique(df.run))
+    out[:n_sr] = count(row -> row.λ != -1, eachrow(out[:colman]))
 
-    # Get only the SR part from df_sr (drop timesteps before ti, after tf)
-    df_sr_filtered = filter(df_sr) do row
-        (; ti, tf) = stats_dict[row.run]
-        ti == -1 ? false : ti ≤ row.t ≤ tf
-    end
+    out[:pscr] = out[:n_sr] / out[:n]
 
-    return (;
-        df,             # All data from all runs
-        df_stats,       # Statistics (in terms of Colman's parameterization) for all runs
-        stats_dict,     # run::Int => (stats...)
-        df_stats_sr,    # Statistics only for runs that had SR
-        pscr,           # Prob(SR)
-        df_sr,          # Data only from runs that had SR
-        df_sr_filtered, # Data only from runs that had SR, filtered to only include SR portion (ti to tf)
-        init            # Initial states
-    )
+    runs_with_sr = filter(!=(-1), out[:colman].ti)
+    out[:df_sr_only] = filter(row -> row.run in runs_with_sr, df)
+
+    return out
 end
 
 #-----------------------------------------------------------------------------# Generative PCA
