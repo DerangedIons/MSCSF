@@ -35,6 +35,8 @@ end
     Beats::Int = 1
     Read_state::String = "Off"
     Write_state::String = "Off"
+    State_Reference_read::String = "Off"
+    State_Reference_write::String = "Off"
     Total_time::Int = Beats * BCL
     Sim_cell_size::String = "full"
 end
@@ -81,15 +83,19 @@ struct Model3DSimulations
         prepace.Reference = Reference
         prepace.Results_Reference = "prepace"
         prepace.Write_state = "ave"
+        prepace.State_Reference_write = Reference
 
         prepace_full.Reference = Reference
         prepace_full.Results_Reference = "prepace_full"
         prepace_full.Read_state = "ave"
         prepace_full.Write_state = "On"
+        prepace_full.State_Reference_read = Reference
+        prepace_full.State_Reference_write = Reference
 
         runner.Reference = Reference
         runner.Results_Reference = "run_" * lpad(1, 4, '0')
         runner.Read_state = "On"
+        runner.State_Reference_read = Reference
         new(Reference, prepace, prepace_full, runner)
     end
 end
@@ -98,11 +104,11 @@ Base.show(io::IO, o::Model3DSimulations) = print(io, "Model3DSimulations: $(repr
 
 open_reference(o::Model3DSimulations) = DefaultApplication.open(reference(o))
 
-# TODO: Use ord model?
-# TODO: Ca input to generative PCA model is last row of prepace_full *Ca_NSR*
+# Default Model is "minimal".  Should we be using ord model?
+# Note: Ca input to generative PCA model is last row of prepace_full *Ca_NSR*
 function Model3DSimulations(; ISO=1, BCL=1000, Total_time=2000)
-    common = (Model="minimal", Jup_scale=1, tau_ss_type="medium_fast", ISO, BCL)
-    prepace =      Model3D(; Beats=40, Sim_cell_size="testing", common...)
+    common = (Jup_scale=2, tau_ss_type="medium_fast", ISO, BCL)
+    prepace =      Model3D(; Beats=50, Sim_cell_size="testing", common...)
     prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
     runner =       Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
     Model3DSimulations("sr_$(BCL)_$(ISO)", prepace, prepace_full, runner)
@@ -151,24 +157,24 @@ function Base.run(o::Model3DSimulations)
 end
 
 
-# #-----------------------------------------------------------------------------# sims_low
-# # Total_time is passed to the `runner`
-# function sims_low(; Total_time=1300)
-#     common = (ISO = 0, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 1000)
-#     prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
-#     prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
-#     runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
-#     Model3DSimulations("sr_low", prepace, prepace_full, runner)
-# end
+#-----------------------------------------------------------------------------# sims_low
+# Total_time is passed to the `runner`
+function sims_low(; Total_time=1300)
+    common = (ISO = 0, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 1000)
+    prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
+    prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
+    runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
+    Model3DSimulations("sr_low", prepace, prepace_full, runner)
+end
 
-# #-----------------------------------------------------------------------------# sims_high
-# function sims_high(; Total_time=1300)
-#     common = (ISO = 1, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 350)
-#     prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
-#     prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
-#     runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
-#     Model3DSimulations("sr_high", prepace, prepace_full, runner)
-# end
+#-----------------------------------------------------------------------------# sims_high
+function sims_high(; Total_time=1300)
+    common = (ISO = 1, Jup_scale = 1, tau_ss_type = "medium_fast", BCL = 350)
+    prepace = Model3D(; Beats=40, Sim_cell_size="testing", common...)
+    prepace_full = Model3D(; Beats=4, Sim_cell_size="full", common...)
+    runner = Model3D(; Beats=1, Sim_cell_size="full", Total_time, common...)
+    Model3DSimulations("sr_high", prepace, prepace_full, runner)
+end
 
 #-----------------------------------------------------------------------------# loading DataFrames
 function load_cru_file(path::String)

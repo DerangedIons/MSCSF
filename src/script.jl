@@ -1,4 +1,4 @@
-using MSCSF, Distributions, HypothesisTests, StatsPlots, DataFrames, MultivariateStats, LinearAlgebra
+using CellSims, Distributions, HypothesisTests, StatsPlots, DataFrames, MultivariateStats, LinearAlgebra
 
 
 # PREREQUISITE:
@@ -7,10 +7,10 @@ using MSCSF, Distributions, HypothesisTests, StatsPlots, DataFrames, Multivariat
 #--------------------------------------------------------------------------# Create Simulation Runs
 # See also: sims_low() and the lower-level Model3DSimulations struct
 # sims_high akes about 6.5 minutes per run
-sim = sims_high()
+sim = CellSims.sims_high()
 
 # How many runs to simulate
-n = 100
+n = 25
 
 # !!! This will take a while depending on n !!!
 @elapsed for i in 1:n
