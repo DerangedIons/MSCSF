@@ -4,7 +4,7 @@ using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultAp
     MultivariateStats, LinearAlgebra, OrderedCollections
 
 export Model3D, Model3DSimulations,
-    reference, results, open_reference, open_results, all_simulations, get_df
+    reference, results, open_reference, open_results, all_simulations, get_df, preview, analyze
 
 #-----------------------------------------------------------------------------# init
 DIR::String = ""  # where data goes, e.g. $DIR/$Reference/$Results_Reference/
@@ -17,6 +17,13 @@ function __init__()
     # Directory needs to exist or model_single_3D code crashes
     write(joinpath(DIR, "PATH.txt"), STATE_AND_GEOMETRY_FILES)
     mkpath(joinpath(STATE_AND_GEOMETRY_FILES, "State_files", "Single_cell"))
+end
+
+# for displaying plots on server
+function preview(x)
+    file = joinpath(@__DIR__, "..", "data", "preview.png")
+    savefig(x, file)
+    file
 end
 
 #-------------------------------------------------all----------------------------# Model3D
@@ -286,10 +293,18 @@ function analyze(sim::Model3DSimulations)
 
     out[:pscr] = out[:n_sr] / out[:n]
 
+    out[:plot] = plot(df.t, df.RyR_OA, g=df.run, xlab="t", ylab="RyR_OA", title="$(sim.Reference)")
+
     runs_with_sr = filter(!=(-1), out[:colman].ti)
     out[:df_sr_only] = filter(row -> row.run in runs_with_sr, df)
 
     return out
+end
+
+function analyze(sims::Vector{Model3DSimulations})
+    OrderedDict(
+        sim.Reference => analyze(sim) for sim in sims
+    )
 end
 
 #-----------------------------------------------------------------------------# Generative PCA

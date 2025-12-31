@@ -4,24 +4,38 @@ using CellSims, ProgressMeter, OrderedCollections, Plots
 
 sims = all_simulations()
 
-out = OrderedDict()
+dict = CellSims.analyze(sims)
 
-for (i, sim) in enumerate(sims)
-    @info "Analyzing simulation $(i)/$(length(sims)): BCL=$(sim.runner.BCL), ISO=$(sim.runner.ISO)..."
-    n = length(results(sim))
-
-    @info "    Number of runs: $n"
-
-    if n == 0
-        @warn "    No runs!  Skipping analysis."
-        continue
-    end
-
-
-    out[sim.Reference] = CellSims.analyze(sim)
+for (k, v) in dict
+    @info "Simulation: $k"
+    @info "   P(SCR) = $(v[:pscr])"
 end
 
-@info "Analysis complete!  $(length(out)) / $(length(sims)) simulations analyzed."
+# Big plot
+plt = plot([v[:plot] for v in values(dict)]..., xlab="", ylab="", label="", link=:all, ticks=false, size=(1200, 800))
+preview(plt)
+
+# out = OrderedDict()
+
+# for (i, sim) in enumerate(sims)
+#     @info "Analyzing simulation $(i)/$(length(sims)): BCL=$(sim.runner.BCL), ISO=$(sim.runner.ISO)..."
+#     n = length(results(sim))
+
+#     @info "    Number of runs: $n"
+
+#     if n == 0
+#         @warn "    No runs!  Skipping analysis."
+#         continue
+#     end
+
+#     entry = out[sim.Reference] = CellSims.analyze(sim)
+#     @info "   P(SCR) = $(entry[:pscr])"
+# end
+
+# @info "Analysis complete!  $(length(out)) / $(length(sims)) simulations analyzed."
+
+
+
 
 
 # init_Ca_cyto = OrderedDict(
