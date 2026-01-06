@@ -37,4 +37,4 @@ include("src/analyze.jl")
 
 - This script will populate `data/results/sr_$BCL_$ISO` with plots of the results.
 - Summary plots in `data/results/summary`
-- A DataFrame `df` is also created with all the grouped results.
+- A DataFrame `df` is also created with all the grouped results: P(SCR) and starting Ca_NSR (final amount from prepace)
