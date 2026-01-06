@@ -33,7 +33,7 @@ macro trycatch(ex)
     end
 end
 
-#-------------------------------------------------all----------------------------# Model3D
+#-----------------------------------------------------------------------------# Model3D
 # Specification of a single run of the 3D model
 @kwdef mutable struct Model3D
     bin::String = joinpath(@__DIR__, "..", "CODE", "model_single_3D")
@@ -373,6 +373,16 @@ function (o::GenerativePCA)()
     f_inv = inverse(o.fun)
     w = reconstruct(o.model, rand(o.dist))
     max.(o.min, f_inv.(w))
+end
+
+#-----------------------------------------------------------------------------# generate_vtk_with_sr
+function generate_vtk(BCL=300, ISO=1, Total_time=2000)
+    sim = Model3DSimulations(; ISO, BCL)
+    sim.runner.Spatial_output_interval_data = 1
+    sim.runner.Spatial_output_interval_vtk = 1
+    sim.runner.Total_time = Total_time
+    run(sim)
+    return joinpath(reference(sim), "Spatial_" * results(sim)[end])
 end
 
 end
