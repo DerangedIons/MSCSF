@@ -1,64 +1,31 @@
 # This assumes the `generate_all.jl` script has already been run to generate simulation data
 
-using CellSims, ProgressMeter, OrderedCollections, Plots
+using CellSims, ProgressMeter, OrderedCollections, Plots, DataFrames
 
 sims = all_simulations()
 
+#-----------------------------------------------------------------------------# Get analysis dict
+# Suppress warnings for when generative PCA fitting fails
+CellSims.QUIET = true
+
 dict = CellSims.analyze(sims)
 
-for (k, v) in dict
-    @info "Simulation: $k"
-    @info "   P(SCR) = $(v[:pscr])"
-end
+#-----------------------------------------------------------------------------# Make summary DataFrame
+df = DataFrame(
+    sim = collect(keys(dict)),
+    bcl = [v[:bcl] for v in values(dict)],
+    iso = [v[:iso] for v in values(dict)],
+    n = [v[:n] for v in values(dict)],
+    n_sr = [v[:n_sr] for v in values(dict)],
+    pscr = [v[:pscr] for v in values(dict)],
+    prepace_final_ca_nsr = [v[:prepace_full][end, :Ca_NSR] for v in values(dict)],
+)
 
-# Big plot
-plt = plot([v[:plot] for v in values(dict)]..., xlab="", ylab="", label="", link=:all, ticks=false, size=(1200, 800))
-preview(plt)
+#-----------------------------------------------------------------------------# Plots
+dir = mkpath(joinpath(@__DIR__, "..", "data", "results", "summary"))
 
-# out = OrderedDict()
+savefig(scatter(df.bcl, df.pscr, group=df.iso, xlab="BCL", ylab="P(SCR)", legendtitle="ISO"), "$dir/pscr_vs_bcl.png")
 
-# for (i, sim) in enumerate(sims)
-#     @info "Analyzing simulation $(i)/$(length(sims)): BCL=$(sim.runner.BCL), ISO=$(sim.runner.ISO)..."
-#     n = length(results(sim))
+savefig(scatter(df.bcl, df.prepace_final_ca_nsr, group=df.iso, xlab="BCL", ylab="Final Ca_NSR (prepace)", legendtitle="ISO"), "$dir/ca_nsr_vs_bcl.png")
 
-#     @info "    Number of runs: $n"
-
-#     if n == 0
-#         @warn "    No runs!  Skipping analysis."
-#         continue
-#     end
-
-#     entry = out[sim.Reference] = CellSims.analyze(sim)
-#     @info "   P(SCR) = $(entry[:pscr])"
-# end
-
-# @info "Analysis complete!  $(length(out)) / $(length(sims)) simulations analyzed."
-
-
-
-
-
-# init_Ca_cyto = OrderedDict(
-#     k => v.df.Ca_cyto[400] for (k, v) in results
-# )
-
-# v = collect(values(init_Ca_cyto))
-
-# barplot(collect(keys(init_Ca_cyto)), collect(values(init_Ca_cyto)), xlim=extrema(v))
-
-
-# results = Dict(
-#     sim.Reference => CellSims.analyze(sim) for sim in sims
-# )
-
-
-# init = Dict(
-#     CellSims.get_df(sim).
-# )
-
-# results = map(sims) do sim
-#     @info sim
-#     df = CellSims.get_df(sim)
-#     stats = CellSims.stats(df)
-#     (; df, stats)
-# end
+df

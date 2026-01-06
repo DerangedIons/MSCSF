@@ -4,7 +4,7 @@ using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultAp
     MultivariateStats, LinearAlgebra, OrderedCollections
 
 export Model3D, Model3DSimulations,
-    reference, results, open_reference, open_results, all_simulations, get_df, preview, analyze
+    reference, results, open_reference, open_results, all_simulations, get_df, preview, analyze, @trycatch
 
 #-----------------------------------------------------------------------------# init
 DIR::String = ""  # where data goes, e.g. $DIR/$Reference/$Results_Reference/
@@ -19,11 +19,18 @@ function __init__()
     mkpath(joinpath(STATE_AND_GEOMETRY_FILES, "State_files", "Single_cell"))
 end
 
-# for displaying plots on server
-function preview(x)
-    file = joinpath(@__DIR__, "..", "data", "preview.png")
-    savefig(x, file)
-    file
+QUIET::Bool = false
+
+macro trycatch(ex)
+    quote
+        try
+            $(esc(ex))
+        catch e
+            if !CellSims.QUIET
+                @warn "Error occurred in expression" exception=(e, catch_backtrace()) location=$(__source__)
+            end
+        end
+    end
 end
 
 #-------------------------------------------------all----------------------------# Model3D
@@ -279,10 +286,14 @@ end
 function analyze(sim::Model3DSimulations)
     out = OrderedDict()
 
+    dir = mkpath(joinpath(@__DIR__, "..", "data", "results", sim.Reference))
+
     df = get_df(sim)
     prepace = get_prepace_df(sim)
     prepace_full = get_prepace_full_df(sim)
 
+    out[:bcl] = sim.runner.BCL
+    out[:iso] = sim.runner.ISO
     out[:df] = df
     out[:prepace] = prepace
     out[:prepace_full] = prepace_full
@@ -293,17 +304,32 @@ function analyze(sim::Model3DSimulations)
 
     out[:pscr] = out[:n_sr] / out[:n]
 
-    out[:plot] = plot(df.t, df.RyR_OA, g=df.run, xlab="t", ylab="RyR_OA", title="$(sim.Reference)")
+    out[:plot] = plot(df.t, df.RyR_OA, g=df.run, xlab="t", ylab="RyR_OA", lab="", title="$(sim.Reference)")
+    savefig(out[:plot], "$dir/plot.png")
 
-    runs_with_sr = filter(!=(-1), out[:colman].ti)
+    runs_with_sr = filter(row -> row.ti != -1, out[:colman]).run
     out[:df_sr_only] = filter(row -> row.run in runs_with_sr, df)
+
+    @trycatch out[:gen_pca] = GenerativePCA(out[:df_sr_only], identity)
+    @trycatch out[:gen_pca_log] = GenerativePCA(out[:df_sr_only], ApproxLog(0.1))
+
+    if haskey(out, :gen_pca)
+        waves = [out[:gen_pca]() for _ in 1:10]
+        p = plot(waves, xlab="Time (ms)", ylab="RyR_OA", title="Generative PCA Samples for $(sim.Reference)")
+        savefig(p, "$dir/gen_pca_samples.png")
+    end
+    if haskey(out, :gen_pca_log)
+        waves = [out[:gen_pca_log]() for _ in 1:10]
+        p = plot(waves, xlab="Time (ms)", ylab="RyR_OA", title="Generative Log PCA Samples for $(sim.Reference)")
+        savefig(p, "$dir/gen_pca_log_samples.png")
+    end
 
     return out
 end
 
 function analyze(sims::Vector{Model3DSimulations})
     OrderedDict(
-        sim.Reference => analyze(sim) for sim in sims
+        sim.Reference => (@info("Analyzing: $(sim.Reference)"); analyze(sim)) for sim in sims
     )
 end
 
@@ -317,23 +343,36 @@ inverse(o::ApproxLog) = x -> exp(x) - o.eps
 inverse(::typeof(identity)) = identity
 
 
-function fit_generative_pca(df_sr::AbstractDataFrame, f = ApproxLog(0.1); k=25, pratio=.999)
+@kwdef struct GenerativePCA{F, D}
+    fun::F = ApproxLog(0.1)
+    model::PCA{Float64}
+    dist::D
+    min::Float64
+end
+function GenerativePCA(df_sr::AbstractDataFrame, f = ApproxLog(0.1); k=25, pratio=.999)
     isempty(df_sr) && error("df_sr is empty; cannot fit PCA model")
-    f2 = inverse(f)
 
-    w = reduce(hcat, f.(sub.RyR_OA) for sub in groupby(df_sr, "run"))
+    gdf = groupby(df_sr, "run")
 
+    # If simulations are currently running, the last run might have a different number of rows
+    # We'll drop simulations that don't have the same n as the first run.
+    n = nrow(first(gdf))
+    gdf2 = filter(sub -> nrow(sub) == n, gdf)
+
+    w = reduce(hcat, f.(sub.RyR_OA) for sub in gdf2)
     model = fit(PCA, w; maxoutdim=k, pratio);
-
     z = MultivariateStats.transform(model, w)
-
     μ = vec(mean(z, dims=2))
-    Σ = cov(z; dims=2)
-    dist = MvNormal(μ, Symmetric(Σ))
-
+    Σ = Symmetric(cov(z; dims=2))
+    dist = MvNormal(μ, Σ)
     minval = minimum(df_sr.RyR_OA)
+    GenerativePCA(f, model, dist, minval)
+end
 
-    rand_waveform() = max.(minval, reconstruct(model, rand(dist)))
+function (o::GenerativePCA)()
+    f_inv = inverse(o.fun)
+    w = reconstruct(o.model, rand(o.dist))
+    max.(o.min, f_inv.(w))
 end
 
 end
