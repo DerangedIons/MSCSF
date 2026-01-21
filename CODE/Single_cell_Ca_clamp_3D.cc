@@ -431,6 +431,9 @@ int main(int argc, char *argv[])
     Vm = State.Vm;
     printf("Initial conditions set\n");
 
+    // Setup stimulus/timing variables (needed for dtinv even though Ca clamp doesn't use stimulus)
+    stimulus_setup(Params, &Variables, Sim.dt, Sim.BCL, 0, 0); // lib/Model.c
+
     // Time loop ================================================================================\\|
     printf("Time loop started:\nTime = %.0fms\n",sim_time);
     for (sim_time = 0.0; sim_time <= (float)Sim.Total_time; sim_time += Sim.dt)

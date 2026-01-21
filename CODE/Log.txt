@@ -13,3 +13,28 @@ Sim time: Tue Jan 23 13:00:20 2024
 Model version ran: Tissue_integrated_network
 Settings:	Tissue_order geo Tissue_model 2D_human_atria_fibrosis_300x300_OY Model minimal Celltype RA BCL 250 Remodelling none ISO 0.0 Read_state   ave Write_state   On Tissue_type homogeneous reference   Tissue_full_state_write Total_time 250 NBeats 10 Spatial_output_interval_data   0 Spatial_output_interval_vtk   0 D1 0.4 D_AR 7 state_reference_write   Control 
 
+
+Sim time: Wed Jan 21 13:58:53 2026
+Model version ran: Single_cell_3D
+Settings:	Model minimal ISO 0 Jup_scale 2.0 Jrel_scale 1.0 RyR_Po 0.5 tau_ss_type medium_fast Spatial_output_interval_data   0 Spatial_output_interval_vtk   0 reference   ca_clamp_Cai0.05_CaSR500.0_ISO0_Po0.5 results_reference   run_0001 Total_time 2000 Sim_cell_size full Cai 0.05 CaSR 500.0 
+
+
+Sim time: Wed Jan 21 14:00:37 2026
+Model version ran: Single_cell_3D
+Settings:	
+
+
+Sim time: Wed Jan 21 14:00:46 2026
+Model version ran: Single_cell_3D
+Settings:	Model minimal ISO 0 Jup_scale 2.0 Jrel_scale 1.0 RyR_Po 0.5 tau_ss_type medium_fast Spatial_output_interval_data   0 Spatial_output_interval_vtk   0 reference   test results_reference   test_run Total_time 100 Sim_cell_size full Cai 0.05 CaSR 500.0 
+
+
+Sim time: Wed Jan 21 14:00:56 2026
+Model version ran: Single_cell_3D
+Settings:	Model minimal ISO 0 Jup_scale 2.0 Jrel_scale 1.0 RyR_Po 0.5 tau_ss_type medium_fast Spatial_output_interval_data   0 Spatial_output_interval_vtk   0 reference   test results_reference   test_run Total_time 100 Sim_cell_size full Cai 0.05 CaSR 500.0 
+
+
+Sim time: Wed Jan 21 14:01:26 2026
+Model version ran: Single_cell_3D
+Settings:	Model minimal ISO 0 Jup_scale 2.0 Jrel_scale 1.0 RyR_Po 0.5 tau_ss_type medium_fast Spatial_output_interval_data   0 Spatial_output_interval_vtk   0 reference   test results_reference   test_run Total_time 100 Sim_cell_size full Cai 0.05 CaSR 500.0 
+
