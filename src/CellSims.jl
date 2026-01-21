@@ -3,8 +3,8 @@ module CellSims
 using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultApplication,
     MultivariateStats, LinearAlgebra, OrderedCollections
 
-export Model3D, Model3DSimulations,
-    reference, results, open_reference, open_results, all_simulations, get_df, preview, analyze, @trycatch
+export Model3D, Model3DSimulations, CaClamp3D, CaClamp3DSimulations,
+    reference, results, open_reference, open_results, all_simulations, all_clamp_simulations, get_df, preview, analyze, @trycatch
 
 #-----------------------------------------------------------------------------# init
 DIR::String = ""  # where data goes, e.g. $DIR/$Reference/$Results_Reference/
@@ -84,6 +84,135 @@ results(o::Model3D) = mkpath(joinpath(DIR, "Outputs_3Dcell_$(o.Reference)", "Res
 # Opens the "Reference" or "Results" directory in your file browser
 open_reference(o::Model3D) = DefaultApplication.open(reference(o))
 open_results(o::Model3D) = DefaultApplication.open(results(o))
+
+#-----------------------------------------------------------------------------# CaClamp3D
+# Specification of a single run of the 3D calcium clamp model
+@kwdef mutable struct CaClamp3D
+    bin::String = joinpath(@__DIR__, "..", "CODE", "model_Ca_clamp_3D")
+    Model::String = "minimal"
+    ISO::Int = 0
+    Jup_scale::Float64 = 1.0
+    Jrel_scale::Float64 = 1.0   # Scale factor for release flux magnitude
+    RyR_Po::Float64 = 1.0       # Scale factor for RyR Ca-dependent open rate (sensitivity)
+    tau_ss_type::String = "medium_fast"
+    Spatial_output_interval_data::Int = 0
+    Spatial_output_interval_vtk::Int = 0
+    Reference::String = "temp"
+    Results_Reference::String = "temp"
+    Total_time::Int = 2000
+    Sim_cell_size::String = "full"
+    Cai::Float64 = 0.1      # Initial cytosolic Ca (µM) - clamp value
+    CaSR::Float64 = 1000.0  # Initial SR Ca (µM) - clamp value
+end
+
+function Base.Cmd(o::CaClamp3D)
+    out = [o.bin]
+    ref_dir = joinpath(DIR, "Outputs_Ca_clamp_3Dcell_$(o.Reference)")
+    res_dir = joinpath(ref_dir, "Results_$(o.Results_Reference)")
+    mkpath(res_dir)
+
+    for name in setdiff(fieldnames(CaClamp3D), (:bin,))
+        value = getfield(o, name)
+        push!(out, string(name), string(value))
+    end
+    Cmd(out)
+end
+
+function Base.run(o::CaClamp3D)
+    n_threads = max(1, div(Sys.CPU_THREADS, length(all_simulations())))
+    cd(DIR) do
+        withenv("OMP_NUM_THREADS" => string(n_threads)) do
+            run(Cmd(o))
+        end
+    end
+end
+
+reference(o::CaClamp3D) = mkpath(joinpath(DIR, "Outputs_Ca_clamp_3Dcell_$(o.Reference)"))
+results(o::CaClamp3D) = mkpath(joinpath(DIR, "Outputs_Ca_clamp_3Dcell_$(o.Reference)", "Results_$(o.Results_Reference)"))
+
+open_reference(o::CaClamp3D) = DefaultApplication.open(reference(o))
+open_results(o::CaClamp3D) = DefaultApplication.open(results(o))
+
+#-----------------------------------------------------------------------------# CaClamp3DSimulations
+# Specification for generating calcium clamp datasets (no prepacing needed due to clamping)
+struct CaClamp3DSimulations
+    Reference::String
+    runner::CaClamp3D
+
+    function CaClamp3DSimulations(Reference::String, runner::CaClamp3D)
+        runner.Reference = Reference
+        runner.Results_Reference = "run_" * lpad(1, 4, '0')
+        new(Reference, runner)
+    end
+end
+
+Base.show(io::IO, o::CaClamp3DSimulations) = print(io, "CaClamp3DSimulations: $(repr(o.Reference))")
+
+function CaClamp3DSimulations(; ISO=0, Cai=0.1, CaSR=1000.0, RyR_Po=1.0, Total_time=2000)
+    runner = CaClamp3D(;
+        ISO,
+        Cai,
+        CaSR,
+        RyR_Po,
+        Total_time,
+        Jup_scale=2.0,
+        tau_ss_type="medium_fast",
+        Sim_cell_size="full"
+    )
+    CaClamp3DSimulations("ca_clamp_Cai$(Cai)_CaSR$(CaSR)_ISO$(ISO)_Po$(RyR_Po)", runner)
+end
+
+function all_clamp_simulations(;
+    ISO = 0:1,
+    Cai = [0.05, 0.1, 0.2],
+    CaSR = [500.0, 1000.0, 1500.0],
+    RyR_Po = [0.5, 1.0, 2.0]
+)
+    vec([
+        CaClamp3DSimulations(; ISO=iso, Cai=cai, CaSR=casr, RyR_Po=po)
+        for (iso, cai, casr, po) in Iterators.product(ISO, Cai, CaSR, RyR_Po)
+    ])
+end
+
+reference(o::CaClamp3DSimulations) = reference(o.runner)
+
+function results(o::CaClamp3DSimulations)
+    filter(readdir(reference(o))) do dir
+        startswith(dir, "Results_run_")
+    end
+end
+
+Base.length(o::CaClamp3DSimulations) = length(results(o))
+
+function Base.run(o::CaClamp3DSimulations)
+    n = length(o) + 1
+    o.runner.Results_Reference = "run_" * lpad(n, 4, '0')
+    @info "Running Ca clamp simulation run $n for $(o.Reference)..."
+    run(o.runner)
+end
+
+open_reference(o::CaClamp3DSimulations) = DefaultApplication.open(reference(o))
+
+@recipe function f(o::CaClamp3DSimulations, col="RyR_OA"; runs=nothing)
+    title --> "$(o.Reference) Ca Clamp Simulations"
+    label --> ""
+    xlabel --> "Time (ms)"
+    ylabel --> col
+    linewidth --> 1
+    for (i, df) in enumerate(groupby(get_df(o), "run"))
+        if isnothing(runs) || i in runs
+            @series df.t, df[!, col]
+        end
+    end
+end
+
+function get_df(o::CaClamp3DSimulations)
+    dirs = filter(readdir(reference(o))) do dir
+        startswith(dir, "Results_run_")
+    end
+    files = joinpath.(reference(o), dirs, Ref("CRU.txt"))
+    load_cru_files(files)
+end
 
 #-----------------------------------------------------------------------------# Model3DSimulations
 # Specification for generating SR datasets

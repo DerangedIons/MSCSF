@@ -591,7 +591,7 @@ int main(int argc, char *argv[])
     delete[] SR;
     delete[] MEM;
     delete[] Rand;
-    delete[] CRU.TT_map;
+    // TT_map already freed by CRU_map_array_deallocation above
     delete[] myofil;
     delete[] activated_switch;
 } 

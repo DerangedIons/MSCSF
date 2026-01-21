@@ -1,18 +1,39 @@
-# Usage: julia --project=. src/generate.jl BCL ISO [N]
-
-# Example: julia --project=. src/generate.jl 300 1 10
-
-BCL = parse(Int, ARGS[1])
-ISO = parse(Int, ARGS[2])
-N = parse(Int, get(ARGS, 3, "1"))
+# Usage:
+#   Model3D:   julia --project=. src/generate.jl BCL ISO [N]
+#   CaClamp3D: julia --project=. src/generate.jl --clamp Cai CaSR ISO RyR_Po [N]
+#
+# Examples:
+#   julia --project=. src/generate.jl 300 1 10
+#   julia --project=. src/generate.jl --clamp 0.1 1000 0 1.0 5
 
 using CellSims
 
-sims = CellSims.all_simulations()
+if first(ARGS) == "--clamp"
+    Cai = parse(Float64, ARGS[2])
+    CaSR = parse(Float64, ARGS[3])
+    ISO = parse(Int, ARGS[4])
+    RyR_Po = parse(Float64, ARGS[5])
+    N = parse(Int, get(ARGS, 6, "1"))
 
-sim = only(filter(sims) do sim
-    sim.runner.ISO == ISO && sim.runner.BCL == BCL
-end)
+    sims = CellSims.all_clamp_simulations()
+
+    sim = only(filter(sims) do sim
+        sim.runner.ISO == ISO &&
+        sim.runner.Cai == Cai &&
+        sim.runner.CaSR == CaSR &&
+        sim.runner.RyR_Po == RyR_Po
+    end)
+else
+    BCL = parse(Int, ARGS[1])
+    ISO = parse(Int, ARGS[2])
+    N = parse(Int, get(ARGS, 3, "1"))
+
+    sims = CellSims.all_simulations()
+
+    sim = only(filter(sims) do sim
+        sim.runner.ISO == ISO && sim.runner.BCL == BCL
+    end)
+end
 
 for _ in 1:N
     CellSims.run(sim)
