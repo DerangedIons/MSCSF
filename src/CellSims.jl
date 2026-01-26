@@ -4,7 +4,8 @@ using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultAp
     MultivariateStats, LinearAlgebra, OrderedCollections
 
 export Model3D, Model3DSimulations, CaClamp3D, CaClamp3DSimulations,
-    reference, results, open_reference, open_results, all_simulations, all_clamp_simulations, get_df, preview, analyze, @trycatch
+    reference, results, open_reference, open_results, all_simulations, all_clamp_simulations, get_df, preview,
+    generate, generate_all, generate_all_clamp, analyze, summarize, summarize_clamp, @trycatch
 
 #-----------------------------------------------------------------------------# init
 DIR::String = ""  # where data goes, e.g. $DIR/$Reference/$Results_Reference/
@@ -162,15 +163,9 @@ function CaClamp3DSimulations(; ISO=0, Cai=0.1, CaSR=1000.0, RyR_Po=1.0, Total_t
     CaClamp3DSimulations("ca_clamp_Cai$(Cai)_CaSR$(CaSR)_ISO$(ISO)_Po$(RyR_Po)", runner)
 end
 
-function all_clamp_simulations(;
-    ISO = 0:1,
-    Cai = [0.05, 0.1, 0.2],
-    CaSR = [500.0, 1000.0, 1500.0],
-    RyR_Po = [0.5, 1.0, 2.0]
-)
+function all_clamp_simulations(; CaSR = [500.0, 1000.0, 1500.0], RyR_Po = [0.8, 1.0, 1.2])
     vec([
-        CaClamp3DSimulations(; ISO=iso, Cai=cai, CaSR=casr, RyR_Po=po)
-        for (iso, cai, casr, po) in Iterators.product(ISO, Cai, CaSR, RyR_Po)
+        CaClamp3DSimulations(; CaSR, RyR_Po) for (CaSR, RyR_Po) in Iterators.product(CaSR, RyR_Po)
     ])
 end
 
@@ -319,6 +314,68 @@ function sims_high(; Total_time=1300)
     Model3DSimulations("sr_high", prepace, prepace_full, runner)
 end
 
+#-----------------------------------------------------------------------------# generate
+# Run a simulation N times
+function generate(sim::Union{Model3DSimulations, CaClamp3DSimulations}, N::Int=1)
+    for _ in 1:N
+        run(sim)
+    end
+end
+
+# Run multiple simulations N times each
+function generate(sims::Vector{Model3DSimulations}, N::Int=1)
+    @info "Running $(length(sims)) simulation settings, $N times each ($(length(sims) * N) total runs)"
+    for i in 1:N
+        @info "████████████████████████████████████████████████ Run $i/$N..."
+        for sim in sims
+            ISO, BCL = sim.runner.ISO, sim.runner.BCL
+            @info "Running setting: BCL=$BCL, ISO=$ISO"
+            run(sim)
+        end
+    end
+    @info "All simulations complete!"
+end
+
+function generate(sims::Vector{CaClamp3DSimulations}, N::Int=1)
+    @info "Running $(length(sims)) Ca clamp simulation settings, $N times each ($(length(sims) * N) total runs)"
+    for i in 1:N
+        @info "████████████████████████████████████████████████ Run $i/$N..."
+        for sim in sims
+            r = sim.runner
+            @info "Running setting: Cai=$(r.Cai), CaSR=$(r.CaSR), ISO=$(r.ISO), RyR_Po=$(r.RyR_Po)"
+            run(sim)
+        end
+    end
+    @info "All simulations complete!"
+end
+
+# Convenience: generate all Model3D simulations
+generate_all(N::Int=1) = generate(all_simulations(), N)
+
+# Convenience: generate all CaClamp3D simulations
+generate_all_clamp(N::Int=1) = generate(all_clamp_simulations(), N)
+
+# Find and run a specific Model3D simulation
+function generate(N::Int, BCL::Int, ISO::Int)
+    sims = all_simulations()
+    sim = only(filter(sims) do sim
+        sim.runner.ISO == ISO && sim.runner.BCL == BCL
+    end)
+    generate(sim, N)
+end
+
+# Find and run a specific CaClamp3D simulation
+function generate(N::Int; Cai::Float64, CaSR::Float64, ISO::Int, RyR_Po::Float64)
+    sims = all_clamp_simulations()
+    sim = only(filter(sims) do sim
+        sim.runner.ISO == ISO &&
+        sim.runner.Cai == Cai &&
+        sim.runner.CaSR == CaSR &&
+        sim.runner.RyR_Po == RyR_Po
+    end)
+    generate(sim, N)
+end
+
 #-----------------------------------------------------------------------------# loading DataFrames
 function load_cru_file(path::String)
     isfile(path) || error("File does not exist: $path")
@@ -326,7 +383,12 @@ function load_cru_file(path::String)
     rename!(df, cru_cols)
 end
 function load_cru_files(paths::Vector{String})
-    dfs = [load_cru_file(file) for file in paths]
+    dfs = DataFrame[]
+    for file in paths
+        filesize(file) > 0 || continue
+        push!(dfs, load_cru_file(file))
+    end
+    isempty(dfs) && return DataFrame()
     vcat(dfs...; cols=:union, source="run")
 end
 
@@ -461,6 +523,110 @@ function analyze(sims::Vector{Model3DSimulations})
         sim.Reference => (@info("Analyzing: $(sim.Reference)"); analyze(sim)) for sim in sims
     )
 end
+
+function analyze(sim::CaClamp3DSimulations)
+    out = OrderedDict()
+
+    dir = mkpath(joinpath(@__DIR__, "..", "data", "results", sim.Reference))
+
+    df = get_df(sim)
+
+    out[:cai] = sim.runner.Cai
+    out[:casr] = sim.runner.CaSR
+    out[:ryr_po] = sim.runner.RyR_Po
+    out[:iso] = sim.runner.ISO
+    out[:df] = df
+    out[:colman] = get_colman_stats(df)
+    out[:n] = length(unique(df.run))
+    out[:n_sr] = count(row -> row.λ != -1, eachrow(out[:colman]))
+
+    out[:pscr] = out[:n_sr] / out[:n]
+
+    out[:plot] = plot(df.t, df.RyR_OA, g=df.run, xlab="t", ylab="RyR_OA", lab="", title="$(sim.Reference)")
+    savefig(out[:plot], "$dir/plot.png")
+
+    runs_with_sr = filter(row -> row.ti != -1, out[:colman]).run
+    out[:df_sr_only] = filter(row -> row.run in runs_with_sr, df)
+
+    @trycatch out[:gen_pca] = GenerativePCA(out[:df_sr_only], identity)
+    @trycatch out[:gen_pca_log] = GenerativePCA(out[:df_sr_only], ApproxLog(0.1))
+
+    if haskey(out, :gen_pca)
+        waves = [out[:gen_pca]() for _ in 1:10]
+        p = plot(waves, xlab="Time (ms)", ylab="RyR_OA", title="Generative PCA Samples for $(sim.Reference)")
+        savefig(p, "$dir/gen_pca_samples.png")
+    end
+    if haskey(out, :gen_pca_log)
+        waves = [out[:gen_pca_log]() for _ in 1:10]
+        p = plot(waves, xlab="Time (ms)", ylab="RyR_OA", title="Generative Log PCA Samples for $(sim.Reference)")
+        savefig(p, "$dir/gen_pca_log_samples.png")
+    end
+
+    return out
+end
+
+function analyze(sims::Vector{CaClamp3DSimulations})
+    OrderedDict(
+        sim.Reference => (@info("Analyzing: $(sim.Reference)"); analyze(sim)) for sim in sims
+    )
+end
+
+#-----------------------------------------------------------------------------# summarize
+function summarize(sims::Vector{Model3DSimulations}; quiet=true)
+    old_quiet = QUIET
+    QUIET = quiet
+
+    dict = analyze(sims)
+
+    # Make summary DataFrame
+    df = DataFrame(
+        sim = collect(keys(dict)),
+        bcl = [v[:bcl] for v in values(dict)],
+        iso = [v[:iso] for v in values(dict)],
+        n = [v[:n] for v in values(dict)],
+        n_sr = [v[:n_sr] for v in values(dict)],
+        pscr = [v[:pscr] for v in values(dict)],
+        prepace_final_ca_nsr = [v[:prepace_full][end, :Ca_NSR] for v in values(dict)],
+    )
+
+    # Plots
+    dir = mkpath(joinpath(@__DIR__, "..", "data", "results", "summary"))
+    savefig(scatter(df.bcl, df.pscr, group=df.iso, xlab="BCL", ylab="P(SCR)", legendtitle="ISO"), "$dir/pscr_vs_bcl.png")
+    savefig(scatter(df.bcl, df.prepace_final_ca_nsr, group=df.iso, xlab="BCL", ylab="Final Ca_NSR (prepace)", legendtitle="ISO"), "$dir/ca_nsr_vs_bcl.png")
+
+    QUIET = old_quiet
+    return (; dict, df)
+end
+summarize(; kw...) = summarize(all_simulations(); kw...)
+
+function summarize(sims::Vector{CaClamp3DSimulations}; quiet=true)
+    old_quiet = QUIET
+    QUIET = quiet
+
+    dict = analyze(sims)
+
+    # Make summary DataFrame
+    df = DataFrame(
+        sim = collect(keys(dict)),
+        cai = [v[:cai] for v in values(dict)],
+        casr = [v[:casr] for v in values(dict)],
+        ryr_po = [v[:ryr_po] for v in values(dict)],
+        iso = [v[:iso] for v in values(dict)],
+        n = [v[:n] for v in values(dict)],
+        n_sr = [v[:n_sr] for v in values(dict)],
+        pscr = [v[:pscr] for v in values(dict)],
+    )
+
+    # Plots
+    dir = mkpath(joinpath(@__DIR__, "..", "data", "results", "ca_clamp_summary"))
+    savefig(scatter(df.casr, df.pscr, group=df.ryr_po, xlab="CaSR (µM)", ylab="P(SCR)", legendtitle="RyR Po"), "$dir/pscr_vs_casr.png")
+    savefig(scatter(df.ryr_po, df.pscr, group=df.casr, xlab="RyR Po", ylab="P(SCR)", legendtitle="CaSR (µM)"), "$dir/pscr_vs_ryr_po.png")
+    savefig(scatter(df.casr, df.n_sr, group=df.ryr_po, xlab="CaSR (µM)", ylab="N(SCR)", legendtitle="RyR Po"), "$dir/n_sr_vs_casr.png")
+
+    QUIET = old_quiet
+    return (; dict, df)
+end
+summarize_clamp(; kw...) = summarize(all_clamp_simulations(); kw...)
 
 #-----------------------------------------------------------------------------# Generative PCA
 struct ApproxLog
