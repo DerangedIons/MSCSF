@@ -35,26 +35,22 @@ using DataFrames
     @testset "CaClamp3D" begin
         c = CellSims.CaClamp3D()
         @test c.Model == "minimal"
-        @test c.ISO == 0
         @test c.Jup_scale == 1.0
         @test c.Jrel_scale == 1.0
         @test c.RyR_Po == 1.0
         @test c.tau_ss_type == "medium_fast"
         @test c.Total_time == 2000
         @test c.Sim_cell_size == "full"
-        @test c.Cai == 0.1
         @test c.CaSR == 1000.0
 
         # Test with custom parameters
-        c2 = CellSims.CaClamp3D(; Cai=0.2, CaSR=1500.0, RyR_Po=1.2)
-        @test c2.Cai == 0.2
+        c2 = CellSims.CaClamp3D(; CaSR=1500.0, RyR_Po=1.2)
         @test c2.CaSR == 1500.0
         @test c2.RyR_Po == 1.2
 
         # Test Cmd generation
         cmd = Cmd(c)
         cmd_str = string(cmd)
-        @test occursin("Cai", cmd_str)
         @test occursin("CaSR", cmd_str)
         @test occursin("RyR_Po", cmd_str)
     end
@@ -75,17 +71,15 @@ using DataFrames
     end
 
     @testset "CaClamp3DSimulations" begin
-        sim = CaClamp3DSimulations(; Cai=0.1, CaSR=1000.0, ISO=0, RyR_Po=1.0)
-        @test sim.Reference == "ca_clamp_Cai0.1_CaSR1000.0_ISO0_Po1.0"
-        @test sim.runner.Cai == 0.1
+        sim = CaClamp3DSimulations(; CaSR=1000.0, RyR_Po=1.0)
+        @test sim.Reference == "ca_clamp_CaSR1000.0_Po1.0"
         @test sim.runner.CaSR == 1000.0
-        @test sim.runner.ISO == 0
         @test sim.runner.RyR_Po == 1.0
 
         # Test show method
         io = IOBuffer()
         show(io, sim)
-        @test String(take!(io)) == "CaClamp3DSimulations: \"ca_clamp_Cai0.1_CaSR1000.0_ISO0_Po1.0\""
+        @test String(take!(io)) == "CaClamp3DSimulations: \"ca_clamp_CaSR1000.0_Po1.0\""
     end
 
     @testset "all_simulations" begin

@@ -91,7 +91,6 @@ open_results(o::Model3D) = DefaultApplication.open(results(o))
 @kwdef mutable struct CaClamp3D
     bin::String = joinpath(@__DIR__, "..", "CODE", "model_Ca_clamp_3D")
     Model::String = "minimal"
-    ISO::Int = 0
     Jup_scale::Float64 = 1.0
     Jrel_scale::Float64 = 1.0   # Scale factor for release flux magnitude
     RyR_Po::Float64 = 1.0       # Scale factor for RyR Ca-dependent open rate (sensitivity)
@@ -100,7 +99,7 @@ open_results(o::Model3D) = DefaultApplication.open(results(o))
     Spatial_output_interval_vtk::Int = 0
     Reference::String = "temp"
     Results_Reference::String = "temp"
-    Total_time::Int = 2000
+    Total_time::Int = 1500
     Sim_cell_size::String = "full"
     Cai::Float64 = 0.1      # Initial cytosolic Ca (µM) - clamp value
     CaSR::Float64 = 1000.0  # Initial SR Ca (µM) - clamp value
@@ -149,10 +148,8 @@ end
 
 Base.show(io::IO, o::CaClamp3DSimulations) = print(io, "CaClamp3DSimulations: $(repr(o.Reference))")
 
-function CaClamp3DSimulations(; ISO=0, Cai=0.1, CaSR=1000.0, RyR_Po=1.0, Total_time=2000)
+function CaClamp3DSimulations(; CaSR=1000.0, RyR_Po=1.0, Total_time=1500)
     runner = CaClamp3D(;
-        ISO,
-        Cai,
         CaSR,
         RyR_Po,
         Total_time,
@@ -160,10 +157,10 @@ function CaClamp3DSimulations(; ISO=0, Cai=0.1, CaSR=1000.0, RyR_Po=1.0, Total_t
         tau_ss_type="medium_fast",
         Sim_cell_size="full"
     )
-    CaClamp3DSimulations("ca_clamp_Cai$(Cai)_CaSR$(CaSR)_ISO$(ISO)_Po$(RyR_Po)", runner)
+    CaClamp3DSimulations("ca_clamp_CaSR$(CaSR)_Po$(RyR_Po)", runner)
 end
 
-function all_clamp_simulations(; CaSR = [500.0, 1000.0, 1500.0], RyR_Po = [0.8, 1.0, 1.2])
+function all_clamp_simulations(; CaSR = 1500.0:200:2500.0, RyR_Po = [0.8, 1.0, 1.2])
     vec([
         CaClamp3DSimulations(; CaSR, RyR_Po) for (CaSR, RyR_Po) in Iterators.product(CaSR, RyR_Po)
     ])
@@ -342,7 +339,7 @@ function generate(sims::Vector{CaClamp3DSimulations}, N::Int=1)
         @info "████████████████████████████████████████████████ Run $i/$N..."
         for sim in sims
             r = sim.runner
-            @info "Running setting: Cai=$(r.Cai), CaSR=$(r.CaSR), ISO=$(r.ISO), RyR_Po=$(r.RyR_Po)"
+            @info "Running setting: CaSR=$(r.CaSR), RyR_Po=$(r.RyR_Po)"
             run(sim)
         end
     end
@@ -365,11 +362,9 @@ function generate(N::Int, BCL::Int, ISO::Int)
 end
 
 # Find and run a specific CaClamp3D simulation
-function generate(N::Int; Cai::Float64, CaSR::Float64, ISO::Int, RyR_Po::Float64)
+function generate(N::Int; CaSR::Float64, RyR_Po::Float64)
     sims = all_clamp_simulations()
     sim = only(filter(sims) do sim
-        sim.runner.ISO == ISO &&
-        sim.runner.Cai == Cai &&
         sim.runner.CaSR == CaSR &&
         sim.runner.RyR_Po == RyR_Po
     end)
@@ -531,10 +526,8 @@ function analyze(sim::CaClamp3DSimulations)
 
     df = get_df(sim)
 
-    out[:cai] = sim.runner.Cai
     out[:casr] = sim.runner.CaSR
     out[:ryr_po] = sim.runner.RyR_Po
-    out[:iso] = sim.runner.ISO
     out[:df] = df
     out[:colman] = get_colman_stats(df)
     out[:n] = length(unique(df.run))
@@ -608,10 +601,8 @@ function summarize(sims::Vector{CaClamp3DSimulations}; quiet=true)
     # Make summary DataFrame
     df = DataFrame(
         sim = collect(keys(dict)),
-        cai = [v[:cai] for v in values(dict)],
         casr = [v[:casr] for v in values(dict)],
         ryr_po = [v[:ryr_po] for v in values(dict)],
-        iso = [v[:iso] for v in values(dict)],
         n = [v[:n] for v in values(dict)],
         n_sr = [v[:n_sr] for v in values(dict)],
         pscr = [v[:pscr] for v in values(dict)],

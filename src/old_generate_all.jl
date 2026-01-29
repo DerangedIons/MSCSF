@@ -18,7 +18,7 @@ if first(ARGS) == "--clamp"
         @info "████████████████████████████████████████████████ Run $i/$N..."
         for sim in sims
             r = sim.runner
-            @info "Running setting: Cai=$(r.Cai), CaSR=$(r.CaSR), ISO=$(r.ISO), RyR_Po=$(r.RyR_Po)"
+            @info "Running setting: Cai=$(r.Cai), CaSR=$(r.CaSR), RyR_Po=$(r.RyR_Po)"
             CellSims.run(sim)
         end
     end

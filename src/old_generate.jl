@@ -1,24 +1,22 @@
 # Usage:
 #   Model3D:   julia --project=. src/generate.jl BCL ISO [N]
-#   CaClamp3D: julia --project=. src/generate.jl --clamp Cai CaSR ISO RyR_Po [N]
+#   CaClamp3D: julia --project=. src/generate.jl --clamp Cai CaSR RyR_Po [N]
 #
 # Examples:
 #   julia --project=. src/generate.jl 300 1 10
-#   julia --project=. src/generate.jl --clamp 0.1 1000 0 1.0 5
+#   julia --project=. src/generate.jl --clamp 0.1 1000 1.0 5
 
 using CellSims
 
 if first(ARGS) == "--clamp"
     Cai = parse(Float64, ARGS[2])
     CaSR = parse(Float64, ARGS[3])
-    ISO = parse(Int, ARGS[4])
-    RyR_Po = parse(Float64, ARGS[5])
-    N = parse(Int, get(ARGS, 6, "1"))
+    RyR_Po = parse(Float64, ARGS[4])
+    N = parse(Int, get(ARGS, 5, "1"))
 
     sims = CellSims.all_clamp_simulations()
 
     sim = only(filter(sims) do sim
-        sim.runner.ISO == ISO &&
         sim.runner.Cai == Cai &&
         sim.runner.CaSR == CaSR &&
         sim.runner.RyR_Po == RyR_Po
