@@ -5,7 +5,8 @@ using CSV, DataFrames, Distributions, Statistics, StatsPlots, Scratch, DefaultAp
 
 export Model3D, Model3DSimulations, CaClamp3D, CaClamp3DSimulations,
     reference, results, open_reference, open_results, all_simulations, all_clamp_simulations, get_df, preview,
-    generate, generate_all, generate_all_clamp, analyze, summarize, summarize_clamp, @trycatch
+    generate, generate_all, generate_all_clamp, analyze, summarize, summarize_clamp, @trycatch,
+    plot_all_clamp_simulations
 
 #-----------------------------------------------------------------------------# init
 DIR::String = ""  # where data goes, e.g. $DIR/$Reference/$Results_Reference/
@@ -160,7 +161,7 @@ function CaClamp3DSimulations(; CaSR=1000.0, RyR_Po=1.0, Total_time=1500)
     CaClamp3DSimulations("ca_clamp_CaSR$(CaSR)_Po$(RyR_Po)", runner)
 end
 
-function all_clamp_simulations(; CaSR = 1500.0:200:2500.0, RyR_Po = [0.8, 1.0, 1.2])
+function all_clamp_simulations(; CaSR = 500:100:2000, RyR_Po = [1])
     vec([
         CaClamp3DSimulations(; CaSR, RyR_Po) for (CaSR, RyR_Po) in Iterators.product(CaSR, RyR_Po)
     ])
@@ -618,6 +619,58 @@ function summarize(sims::Vector{CaClamp3DSimulations}; quiet=true)
     return (; dict, df)
 end
 summarize_clamp(; kw...) = summarize(all_clamp_simulations(); kw...)
+
+#-----------------------------------------------------------------------------# plot_all_clamp_simulations
+"""
+    plot_all_clamp_simulations(sims=all_clamp_simulations(); col="RyR_OA", size=(1600, 1200))
+
+Create a grid plot with subplots for each calcium clamp simulation.
+All subplots share the same y-axis limits for easy comparison.
+
+# Arguments
+- `sims`: Vector of CaClamp3DSimulations (default: all_clamp_simulations())
+- `col`: Column to plot (default: "RyR_OA")
+- `size`: Figure size tuple (default: (1600, 1200))
+"""
+function plot_all_clamp_simulations(sims::Vector{CaClamp3DSimulations}=all_clamp_simulations();
+                                     col::String="RyR_OA", size=(1600, 1200))
+    # Load all data first to determine global y-axis limits
+    data = [(sim, get_df(sim)) for sim in sims]
+    filter!(x -> !isempty(x[2]), data)
+
+    isempty(data) && error("No simulation data found")
+
+    # Get global y-axis limits across all simulations
+    ymin = minimum(minimum(df[!, col]) for (_, df) in data)
+    ymax = maximum(maximum(df[!, col]) for (_, df) in data)
+
+    n = length(data)
+    ncols = ceil(Int, sqrt(n))
+    nrows = ceil(Int, n / ncols)
+
+    plots = Plots.Plot[]
+    for (i, (sim, df)) in enumerate(data)
+        p = plot(; title="CaSR=$(sim.runner.CaSR)", titlefontsize=10,
+                   xlabel=(i > n - ncols) ? "Time (ms)" : "",
+                   ylabel=(mod1(i, ncols) == 1) ? col : "",
+                   ylims=(ymin, ymax), legend=false)
+        for sub in groupby(df, "run")
+            plot!(p, sub.t, sub[!, col], linewidth=1.5, alpha=0.7)
+        end
+        push!(plots, p)
+    end
+
+    p = plot(plots...; layout=(nrows, ncols), size=size,
+             plot_title="Calcium Clamp Simulations", plot_titlefontsize=14)
+
+    # Save to data/results folder
+    dir = mkpath(joinpath(@__DIR__, "..", "data", "results", "ca_clamp_summary"))
+    path = joinpath(dir, "all_clamp_simulations_$(col).png")
+    savefig(p, path)
+    @info "Saved plot to $path"
+
+    return p
+end
 
 #-----------------------------------------------------------------------------# Generative PCA
 struct ApproxLog
