@@ -161,7 +161,7 @@ function CaClamp3DSimulations(; CaSR=1000.0, RyR_Po=1.0, Total_time=1500)
     CaClamp3DSimulations("ca_clamp_CaSR$(CaSR)_Po$(RyR_Po)", runner)
 end
 
-function all_clamp_simulations(; CaSR = 500:100:2000, RyR_Po = [1])
+function all_clamp_simulations(; CaSR = [400:100:1600; 1800; 2000], RyR_Po = [1])
     vec([
         CaClamp3DSimulations(; CaSR, RyR_Po) for (CaSR, RyR_Po) in Iterators.product(CaSR, RyR_Po)
     ])
