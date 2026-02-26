@@ -1,3 +1,23 @@
+# Reconstruction Comparison
+#
+# Compares two methods for reconstructing RyR open-probability waveforms:
+#
+#   1. Colman SRF — A product-of-sigmoids parametric model (Colman 2019).
+#      Short events (λ ≤ 300 ms) use a single spike (two sigmoids for rise/decay).
+#      Long events (λ > 300 ms) add a plateau component (four sigmoids total).
+#      Parameters are derived from summary statistics (ti, tp, tf, peak, λ).
+#
+#   2. PCA — Hold-one-out principal component analysis on sqrt-transformed
+#      waveforms.  A PCA basis is fit on all SCR runs except the target, then
+#      the held-out waveform is projected and reconstructed.
+#
+# Examples are drawn from two model types:
+#   - Ca-clamp simulations (CaSR = 900, 1000, 1100, 1200 µM; short + long events)
+#   - 3D cell model simulations (ISO=1, varying BCL)
+#
+# Output: two separate plots (one per method), each showing original vs.
+# reconstruction across all examples.
+
 using CellSims, DataFrames, StatsPlots, MultivariateStats, Statistics
 
 #-----------------------------------------------------------------------------# Colman SRF reconstruction
@@ -93,72 +113,187 @@ function is_good_example(run_df, stats; quiet_threshold=0.1, peak_threshold=0.3)
     n_peaks <= 1
 end
 
-#-----------------------------------------------------------------------------# Helper: load data and prepare PCA groups for a given CaSR
-function load_condition(casr)
-    sims = all_clamp_simulations()
-    sim = only(filter(s -> s.runner.CaSR == casr, sims))
-    df = get_df(sim)
+function find_good_example(candidates, df; quiet=0.1, peak=0.3)
+    sorted = sort(candidates, :peak, rev=true)
+    # Try strict (quiet + unimodal), then fall back to unimodal-only
+    for row in eachrow(sorted)
+        run_df = filter(r -> r.run == row.run, df)
+        is_good_example(run_df, row; quiet_threshold=quiet, peak_threshold=peak) && return row
+    end
+    for row in eachrow(sorted)
+        run_df = filter(r -> r.run == row.run, df)
+        is_good_example(run_df, row; quiet_threshold=Inf, peak_threshold=peak) && return row
+    end
+    nothing
+end
+
+#-----------------------------------------------------------------------------# Data loading helpers
+function load_scr_data(df)
     colman = CellSims.get_colman_stats(df)
     scr_runs = filter(row -> row.λ != -1, colman)
+    isempty(scr_runs) && return nothing
     df_sr = filter(row -> row.run in scr_runs.run, df)
     gdf = groupby(df_sr, "run")
     n = nrow(first(gdf))
     gdf2 = filter(sub -> nrow(sub) == n, gdf)
+    length(gdf2) < 3 && return nothing  # need enough runs for PCA
     (; df, scr_runs, gdf2)
 end
 
-function find_good_example(candidates, df; quiet=0.1, peak=0.3)
-    for row in eachrow(sort(candidates, :peak, rev=true))
-        run_df = filter(r -> r.run == row.run, df)
-        is_good_example(run_df, row; quiet_threshold=quiet, peak_threshold=peak) && return row
-    end
-    error("No good example waveform found")
+function load_condition(casr)
+    sims = all_clamp_simulations()
+    sim = only(filter(s -> s.runner.CaSR == casr, sims))
+    load_scr_data(get_df(sim))
 end
 
-#-----------------------------------------------------------------------------# Short event (λ ≤ 300) from CaSR=1000
-d_s = load_condition(1000)
-short_stats = find_good_example(filter(row -> row.λ <= 300, d_s.scr_runs), d_s.df; peak=0.5)
-short_id = short_stats.run
-short_df = filter(row -> row.run == short_id, d_s.df)
+function load_condition_3d(sim)
+    load_scr_data(get_df(sim))
+end
 
-t_s = short_df.t
-y_s = short_df.RyR_OA
-colman_s = colman_srf(t_s, short_stats)
-pca_s, model_s = pca_reconstruct(d_s.gdf2, short_id)
+#-----------------------------------------------------------------------------# Example extraction
 
-#-----------------------------------------------------------------------------# Long event (λ > 300) from CaSR=1000
-d_l = load_condition(1000)
-long_stats = find_good_example(filter(row -> row.λ > 300, d_l.scr_runs), d_l.df; peak=0.5)
-long_id = long_stats.run
-long_df = filter(row -> row.run == long_id, d_l.df)
+# Make a single example named tuple from a run
+function make_example(d, stats, label)
+    run_df = filter(row -> row.run == stats.run, d.df)
+    pca_y, model = pca_reconstruct(d.gdf2, stats.run)
+    (; t=run_df.t, y=run_df.RyR_OA, colman=colman_srf(run_df.t, stats),
+     pca=pca_y, model, stats, label)
+end
 
-t_l = long_df.t
-y_l = long_df.RyR_OA
-colman_l = colman_srf(t_l, long_stats)
-pca_l, model_l = pca_reconstruct(d_l.gdf2, long_id)
+# Extract short + long examples from a Ca-clamp condition
+function extract_clamp_examples(casr; quiet=0.1, peak=0.3)
+    d = load_condition(casr)
+    isnothing(d) && return NamedTuple[]
+    examples = NamedTuple[]
 
-#-----------------------------------------------------------------------------# Plot (3×2 grid)
-yl_s = (min(minimum(y_s), minimum(colman_s), minimum(pca_s)),
-        max(maximum(y_s), maximum(colman_s), maximum(pca_s)) * 1.05)
-yl_l = (min(minimum(y_l), minimum(colman_l), minimum(pca_l)),
-        max(maximum(y_l), maximum(colman_l), maximum(pca_l)) * 1.05)
+    short_cands = filter(row -> row.λ <= 300, d.scr_runs)
+    if !isempty(short_cands)
+        ss = find_good_example(short_cands, d.df; quiet, peak)
+        !isnothing(ss) && push!(examples, make_example(d, ss, "Clamp $(casr), λ=$(round(Int, ss.λ))"))
+    end
 
-kw = (; lw=2, label="", xformatter=x -> "")
+    long_cands = filter(row -> row.λ > 300, d.scr_runs)
+    if !isempty(long_cands)
+        ls = find_good_example(long_cands, d.df; quiet, peak)
+        !isnothing(ls) && push!(examples, make_example(d, ls, "Clamp $(casr), λ=$(round(Int, ls.λ))"))
+    end
 
-p1 = plot(t_s, y_s; color=:black, ylabel="RyR OA", title="Original (λ=$(round(Int, short_stats.λ)) ms)", ylims=yl_s, kw...)
-p2 = plot(t_l, y_l; color=:black, title="Original (λ=$(round(Int, long_stats.λ)) ms)", ylims=yl_l, kw...)
+    examples
+end
 
-p3 = plot(t_s, colman_s; color=:red, ylabel="RyR OA", title="Colman SRF", ylims=yl_s, kw...)
-p4 = plot(t_l, colman_l; color=:red, title="Colman SRF + Plateau", ylims=yl_l, kw...)
+# Extract up to N examples from a 3D cell model simulation
+function extract_3d_examples(sim; N=1, quiet=0.1, peak=0.3)
+    d = load_condition_3d(sim)
+    isnothing(d) && return NamedTuple[]
 
-p5 = plot(t_s, pca_s; color=:blue, ylabel="RyR OA", title="PCA ($(outdim(model_s)) comp.)", ylims=yl_s, lw=2, label="", xlabel="Time (ms)")
-p6 = plot(t_l, pca_l; color=:blue, title="PCA ($(outdim(model_l)) comp.)", ylims=yl_l, lw=2, label="", xlabel="Time (ms)")
+    examples = NamedTuple[]
+    used_runs = Set{Int}()
+    sorted = sort(d.scr_runs, :peak, rev=true)
+    iso, bcl = sim.runner.ISO, sim.runner.BCL
 
-p = plot(p1, p2, p3, p4, p5, p6; layout=(3, 2), size=(1000, 750),
-    plot_title="Waveform Reconstruction Comparison (CaSR = 1000 µM)")
+    # Strict pass, then relaxed pass
+    for qt in [quiet, Inf]
+        for row in eachrow(sorted)
+            row.run in used_runs && continue
+            run_df = filter(r -> r.run == row.run, d.df)
+            if is_good_example(run_df, row; quiet_threshold=qt, peak_threshold=peak)
+                push!(examples, make_example(d, row, "3D ISO=$(iso) BCL=$(bcl), λ=$(round(Int, row.λ))"))
+                push!(used_runs, row.run)
+                length(examples) >= N && return examples
+            end
+        end
+    end
 
+    length(examples) < N && @warn "Only found $(length(examples)) examples for ISO=$iso BCL=$bcl"
+    examples
+end
+
+#-----------------------------------------------------------------------------# Collect all examples
+
+# Ca-clamp: 4 CaSR values × short + long
+clamp_examples = reduce(vcat, extract_clamp_examples(casr) for casr in [900, 1000, 1100, 1200])
+
+# 3D cell model: ISO=1 with 4 BCL values
+sims_3d = filter(s -> s.runner.ISO == 1 && s.runner.BCL in [300, 500, 700, 1100], all_simulations())
+cell_examples = reduce(vcat, extract_3d_examples(sim) for sim in sims_3d)
+
+all_examples = vcat(clamp_examples, cell_examples)
+@info "Collected $(length(all_examples)) examples: $(length(clamp_examples)) clamp + $(length(cell_examples)) 3D cell"
+
+#-----------------------------------------------------------------------------# Plotting
+
+function ylims_for(e)
+    lo = min(minimum(e.y), minimum(e.colman), minimum(e.pca))
+    hi = max(maximum(e.y), maximum(e.colman), maximum(e.pca)) * 1.05
+    (lo, hi)
+end
+
+function make_reconstruction_plot(examples, method::Symbol; ncols=4)
+    N = length(examples)
+    nrow_pairs = ceil(Int, N / ncols)
+    nrows = 2 * nrow_pairs
+
+    recon_color = method == :colman ? :red : :blue
+    method_name = method == :colman ? "Colman SRF" : "PCA"
+
+    subplots = []
+
+    for pair in 1:nrow_pairs
+        # Original row
+        for col in 1:ncols
+            idx = (pair - 1) * ncols + col
+            if idx > N
+                push!(subplots, plot(; framestyle=:none, label=""))
+                continue
+            end
+            e = examples[idx]
+            yl = ylims_for(e)
+            is_first = col == 1
+            push!(subplots, plot(e.t, e.y;
+                color=:black, lw=2, label="",
+                title=e.label, titlefontsize=8,
+                ylabel=is_first ? "RyR OA" : "",
+                xformatter=x -> "", ylims=yl,
+            ))
+        end
+        # Reconstruction row
+        for col in 1:ncols
+            idx = (pair - 1) * ncols + col
+            if idx > N
+                push!(subplots, plot(; framestyle=:none, label=""))
+                continue
+            end
+            e = examples[idx]
+            yl = ylims_for(e)
+            recon_data = method == :colman ? e.colman : e.pca
+            is_first = col == 1
+            is_last_pair = pair == nrow_pairs
+            subtitle = method == :colman ?
+                (e.stats.λ > 300 ? "SRF + Plateau" : "SRF") :
+                "PCA ($(outdim(e.model)) comp.)"
+            push!(subplots, plot(e.t, recon_data;
+                color=recon_color, lw=2, label="",
+                title=subtitle, titlefontsize=8,
+                ylabel=is_first ? "RyR OA" : "",
+                xlabel=is_last_pair ? "Time (ms)" : "",
+                xformatter=is_last_pair ? :auto : (x -> ""),
+                ylims=yl,
+            ))
+        end
+    end
+
+    plot(subplots...; layout=(nrows, ncols),
+        size=(ncols * 400, nrows * 200),
+        plot_title="$method_name Reconstruction Comparison")
+end
+
+#-----------------------------------------------------------------------------# Generate and save plots
 dir = mkpath(joinpath(@__DIR__, "..", "data", "results", "ca_clamp_summary"))
-savefig(p, joinpath(dir, "reconstruction_comparison.png"))
-@info "Saved reconstruction_comparison.png"
 
-p
+p_colman = make_reconstruction_plot(all_examples, :colman)
+savefig(p_colman, joinpath(dir, "reconstruction_colman.png"))
+@info "Saved reconstruction_colman.png"
+
+p_pca = make_reconstruction_plot(all_examples, :pca)
+savefig(p_pca, joinpath(dir, "reconstruction_pca.png"))
+@info "Saved reconstruction_pca.png"

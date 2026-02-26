@@ -334,8 +334,8 @@ baseline artifacts.](../data/results/sr_300_1/gen_pca_log_samples.png){#fig-gen-
 
 ## PCA Reconstruction vs. Colman Spontaneous Release Functions
 
-@fig-recon compares three representations of individual RyR~OA~ waveforms from calcium
-clamp simulations at $[\text{Ca}^{2+}]_\text{SR} = 1000$ $\mu$M: the original stochastic
+@fig-recon-colman and @fig-recon-pca compare two reconstruction methods for individual RyR~OA~ waveforms from calcium
+clamp and 3D cell model simulations: the original stochastic
 waveform, the Colman Spontaneous Release Function [SRF; @Colman2019srf], and the PCA
 reconstruction. The SRF model approximates each waveform as a product of two sigmoids
 (for short events, $\lambda < 300$ ms) or as a spike-on-plateau (for long events,
@@ -347,10 +347,14 @@ hold-one-out PCA reconstruction (25 sqrt-transform components) closely tracks th
 waveform morphology, including the sharp primary peak and post-peak dynamics, despite never
 having seen the held-out waveform during training.
 
-![Reconstruction comparison for short ($\lambda = 261$ ms, left) and long
-($\lambda = 598$ ms, right) SCR events. Top: original RyR~OA~ waveform. Middle: Colman
-SRF reconstruction from summary statistics. Bottom: hold-one-out PCA reconstruction
-(sqrt transform, 25 components).](../data/results/ca_clamp_summary/reconstruction_comparison.png){#fig-recon width=100%}
+![Colman SRF reconstruction comparison across Ca-clamp (CaSR = 900--1200 µM) and 3D cell
+model (ISO=1, BCL = 300--1100 ms) conditions. Each pair shows the original RyR~OA~
+waveform (top, black) and the Colman SRF reconstruction from summary statistics
+(bottom, red).](../data/results/ca_clamp_summary/reconstruction_colman.png){#fig-recon-colman width=100%}
+
+![Hold-one-out PCA reconstruction comparison (sqrt transform) across the same conditions.
+Each pair shows the original RyR~OA~ waveform (top, black) and the PCA reconstruction
+(bottom, blue).](../data/results/ca_clamp_summary/reconstruction_pca.png){#fig-recon-pca width=100%}
 
 
 # Discussion
