@@ -567,6 +567,7 @@ end
 
 #-----------------------------------------------------------------------------# summarize
 function summarize(sims::Vector{Model3DSimulations}; quiet=true)
+    global QUIET
     old_quiet = QUIET
     QUIET = quiet
 
@@ -594,6 +595,7 @@ end
 summarize(; kw...) = summarize(all_simulations(); kw...)
 
 function summarize(sims::Vector{CaClamp3DSimulations}; quiet=true)
+    global QUIET
     old_quiet = QUIET
     QUIET = quiet
 
